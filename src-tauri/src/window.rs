@@ -5,7 +5,9 @@
 use serde_json::{json, Value};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
+#[cfg(desktop)]
 use tauri::menu::{Menu, MenuItem};
+#[cfg(desktop)]
 use tauri::tray::{TrayIconBuilder, TrayIconEvent};
 use tauri::{
     AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder,
@@ -410,6 +412,7 @@ fn toggle_main_window_visibility(app: &AppHandle) {
 }
 
 // 创建系统托盘：左键切换显隐，右键菜单显示/隐藏 + 退出。
+#[cfg(desktop)]
 pub fn create_tray(app: &AppHandle) -> Result<(), String> {
     let show_hide = MenuItem::with_id(
         app,
@@ -460,6 +463,7 @@ pub fn create_tray(app: &AppHandle) -> Result<(), String> {
 }
 
 // M2 启动装配：恢复窗口状态、应用启动样式、挂载状态持久化、启动穿透光标轮询、创建托盘。
+#[cfg(desktop)]
 pub fn setup(app: &mut tauri::App) {
     let handle = app.handle().clone();
     restore_window_state(&handle);

@@ -14,6 +14,7 @@ mod remote;
 mod settings;
 mod stage;
 mod thumbar;
+#[cfg(desktop)]
 mod updater;
 mod video_export;
 mod voice;
@@ -35,7 +36,17 @@ void (async () => {
 pub fn run() {
     use tauri::Manager;
 
-    let app = tauri::Builder::default()
+    let mut builder = tauri::Builder::default();
+
+    #[cfg(desktop)]
+    {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            window::focus_main_window(app);
+        }));
+        builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+    }
+
+    let app = builder
         .on_page_load(|webview, payload| {
             if payload.event() == tauri::webview::PageLoadEvent::Finished
                 && payload.url().host_str() == Some("tauri.localhost")
@@ -43,12 +54,8 @@ pub fn run() {
                 let _ = webview.eval(DESKTOP_PWA_CACHE_RESET_SCRIPT);
             }
         })
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
-            window::focus_main_window(app);
-        }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let app_data_dir = app
                 .path()
@@ -70,37 +77,51 @@ pub fn run() {
             app.manage(window::MainWindowState::new());
             app.manage(handoff::WindowPlaybackHandoffStore::new());
             app.manage(remote::RemoteControlState::new());
-            app.manage(thumbar::ThumbarState::new());
-            app.manage(discord::DiscordPresenceController::new(app.handle()));
-            app.manage(voice::VoiceInputPauseMonitor::new(app.handle()));
+            #[cfg(desktop)]
+            {
+                app.manage(thumbar::ThumbarState::new());
+                app.manage(discord::DiscordPresenceController::new(app.handle()));
+                app.manage(voice::VoiceInputPauseMonitor::new(app.handle()));
+            }
 
-            let stage_state = stage::StageState::new(app.handle(), app_data_dir.clone());
-            app.manage(stage_state);
-            let obs_state = obs::ObsBrowserSourceState::new(app.handle());
-            app.manage(obs_state);
+            #[cfg(desktop)]
+            {
+                let stage_state = stage::StageState::new(app.handle(), app_data_dir.clone());
+                app.manage(stage_state);
+                let obs_state = obs::ObsBrowserSourceState::new(app.handle());
+                app.manage(obs_state);
+            }
 
             // M9 视频导出：一次性 write token 存储 + 主窗口 prepare/restore 快照。
             app.manage(video_export::VideoExportTokenStore::new());
             app.manage(video_export::VideoExportWindowState::new());
 
             // M10 自动更新：状态机（端点/公钥构建期注入，缺失即 fail closed）。
+            #[cfg(desktop)]
             app.manage(updater::UpdaterState::new(app.handle().clone()));
 
-            window::setup(app);
-            thumbar::setup(app.handle());
+            #[cfg(desktop)]
+            {
+                window::setup(app);
+                thumbar::setup(app.handle());
+            }
 
             // M10 启动更新检查（延迟 4.5s，镜像 electron scheduleStartupUpdateCheck）。
+            #[cfg(desktop)]
             updater::schedule_startup_check(app.handle());
 
-            if let Some(stage) = app.try_state::<stage::StageState>() {
-                let _ = stage.sync_and_serve(app.handle());
-            }
-            if let Some(obs) = app.try_state::<obs::ObsBrowserSourceState>() {
-                let _ = obs.sync_and_serve(app.handle());
-            }
+            #[cfg(desktop)]
+            {
+                if let Some(stage) = app.try_state::<stage::StageState>() {
+                    let _ = stage.sync_and_serve(app.handle());
+                }
+                if let Some(obs) = app.try_state::<obs::ObsBrowserSourceState>() {
+                    let _ = obs.sync_and_serve(app.handle());
+                }
 
-            // M8 启动即同步语音输入暂停监控（同 Electron createWindow 后的 syncState）。
-            voice::sync_state(app.handle());
+                // M8 启动即同步语音输入暂停监控（同 Electron createWindow 后的 syncState）。
+                voice::sync_state(app.handle());
+            }
 
             Ok(())
         })
@@ -178,9 +199,13 @@ pub fn run() {
             netease::get_netease_port,
             netease::get_netease_api_status,
             // M8: thumbar / Discord / voice input pause
+            #[cfg(desktop)]
             thumbar::thumbar_update_buttons,
+            #[cfg(desktop)]
             discord::discord_presence_get_status,
+            #[cfg(desktop)]
             discord::discord_presence_publish_snapshot,
+            #[cfg(desktop)]
             voice::voice_input_pause_get_status,
             // M9: video export (save dialog + sentinel source + window prepare/restore + raw write)
             video_export::video_export_choose_path,
@@ -189,11 +214,17 @@ pub fn run() {
             video_export::video_export_restore_window,
             video_export::video_export_write_file,
             // M10: auto updater (tauri-plugin-updater; contract mirrors electron main.cjs)
+            #[cfg(desktop)]
             updater::get_update_status,
+            #[cfg(desktop)]
             updater::updates_check,
+            #[cfg(desktop)]
             updater::updates_mark_seen,
+            #[cfg(desktop)]
             updater::updates_open_release_page,
+            #[cfg(desktop)]
             updater::updates_download,
+            #[cfg(desktop)]
             updater::updates_quit_and_install,
         ])
         .build(tauri::generate_context!())
@@ -202,7 +233,9 @@ pub fn run() {
     // M8 退出清理：停止语音轮询、关闭 Discord IPC 连接（best-effort）。
     app.run(|app_handle, event| {
         if matches!(event, tauri::RunEvent::Exit) {
+            #[cfg(desktop)]
             voice::stop(app_handle);
+            #[cfg(desktop)]
             discord::destroy(app_handle);
         }
     });

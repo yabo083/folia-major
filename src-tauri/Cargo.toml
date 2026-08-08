@@ -25,7 +25,7 @@ hex = "0.4"
 md-5 = "0.10"
 qrcode = { version = "0.14", default-features = false, features = ["svg"] }
 rand = "0.8"
-reqwest = { version = "0.13", default-features = false, features = ["json", "gzip", "brotli", "charset", "http2", "native-tls"] }
+reqwest = { version = "0.13", default-features = false, features = ["json", "gzip", "brotli", "charset", "http2", "rustls"] }
 rsa = { version = "0.9", features = ["pem", "hazmat"] }
 semver = "1.0.28"
 serde = { version = "1", features = ["derive"] }
@@ -35,8 +35,6 @@ sha2 = "0.10"
 tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
-tauri-plugin-single-instance = "2"
-tauri-plugin-updater = "2"
 tokio = { version = "1", features = ["full"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
 tokio-util = { version = "0.7", features = ["io"] }
@@ -61,6 +59,10 @@ windows = { version = "0.61", features = [
     "Win32_Storage_FileSystem",
     "Win32_Security",
 ] }
+
+[target.'cfg(any(target_os = "windows", target_os = "linux", target_os = "macos"))'.dependencies]
+tauri-plugin-single-instance = "2"
+tauri-plugin-updater = "2"
 
 [profile.release]
 strip = true
