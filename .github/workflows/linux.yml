@@ -47,6 +47,10 @@ jobs:
 
       - name: Install frontend dependencies
         run: npm ci
+        env:
+          NPM_CONFIG_REGISTRY: https://registry.npmmirror.com
+          NPM_CONFIG_FETCH_TIMEOUT: "120000"
+          NPM_CONFIG_FETCH_RETRIES: "5"
 
       - name: Build Debian and AppImage packages
         run: npx tauri build --ci --bundles deb,appimage
