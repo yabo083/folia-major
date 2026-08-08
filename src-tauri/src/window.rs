@@ -4,14 +4,15 @@
 
 use serde_json::{json, Value};
 use std::sync::Mutex;
+#[cfg(desktop)]
 use std::time::{Duration, Instant};
 #[cfg(desktop)]
 use tauri::menu::{Menu, MenuItem};
 #[cfg(desktop)]
 use tauri::tray::{TrayIconBuilder, TrayIconEvent};
-use tauri::{
-    AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder,
-};
+use tauri::{AppHandle, Emitter, Manager};
+#[cfg(desktop)]
+use tauri::{PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder};
 
 use crate::handoff::WindowPlaybackHandoffStore;
 use crate::settings::SettingsStore;
@@ -20,16 +21,24 @@ pub const MAIN_WINDOW_LABEL: &str = "main";
 const TRANSPARENT_PLAYER_BACKGROUND: &str = "TRANSPARENT_PLAYER_BACKGROUND";
 const MAIN_WINDOW_ALWAYS_ON_TOP: &str = "MAIN_WINDOW_ALWAYS_ON_TOP";
 const HIDE_TASKBAR_ICON: &str = "HIDE_TASKBAR_ICON";
+#[cfg(desktop)]
 const MINIMIZE_TO_TRAY: &str = "MINIMIZE_TO_TRAY";
 const WINDOW_BOUNDS: &str = "WINDOW_BOUNDS";
 const WINDOW_IS_MAXIMIZED: &str = "WINDOW_IS_MAXIMIZED";
 const NATIVE_THEME_SOURCE: &str = "NATIVE_THEME_SOURCE";
 
+// 穿透解锁热点：仅 Windows 光标轮询（tick_click_through_monitor）使用。
+#[cfg(windows)]
 const CLICK_THROUGH_HOTSPOT_RIGHT_INSET: i32 = 176;
+#[cfg(windows)]
 const CLICK_THROUGH_HOTSPOT_WIDTH: i32 = 48;
+#[cfg(windows)]
 const CLICK_THROUGH_HOTSPOT_HEIGHT: i32 = 40;
+#[cfg(windows)]
 const CLICK_THROUGH_HOTSPOT_TOP_INSET: i32 = 4;
+#[cfg(desktop)]
 const CLICK_THROUGH_MONITOR_INTERVAL_MS: u64 = 50;
+#[cfg(desktop)]
 const WINDOW_STATE_SAVE_DEBOUNCE_MS: u64 = 300;
 
 #[cfg(windows)]
@@ -64,7 +73,9 @@ pub(crate) fn disable_native_window_corners(window: &tauri::WebviewWindow) -> Re
     Ok(())
 }
 
-#[cfg(not(windows))]
+// 桌面专属：disable_native_window_corners 的桩实现仅在非 Windows 的桌面目标
+// 编译（Android/iOS 上引用它的 window_set_transparent_mode 也不编译）。
+#[cfg(all(not(windows), desktop))]
 pub(crate) fn disable_native_window_corners(_window: &tauri::WebviewWindow) -> Result<(), String> {
     Ok(())
 }
@@ -85,6 +96,8 @@ pub struct MainWindowState {
 struct ClickThroughState {
     enabled: bool,
     unlock_hover: bool,
+    // 窗口状态保存节流：仅桌面目标（setup_window_state_persistence）读写。
+    #[cfg(desktop)]
     last_window_state_save: Option<Instant>,
 }
 
@@ -128,6 +141,8 @@ fn ex_style_toggle(
 }
 
 // 计算穿透解锁热点矩形（窗口局部坐标，镜像 MAIN_WINDOW_CLICK_THROUGH_UNLOCK_HOTSPOT）。
+// 仅 Windows 光标轮询使用（另有 Windows 专属单元测试覆盖）。
+#[cfg(windows)]
 fn hotspot_bounds(window_width: i32, scale_factor: f64) -> (i32, i32, i32, i32) {
     let scaled = |value: i32| (f64::from(value) * scale_factor).round() as i32;
     let right = window_width - scaled(CLICK_THROUGH_HOTSPOT_RIGHT_INSET);
@@ -138,6 +153,7 @@ fn hotspot_bounds(window_width: i32, scale_factor: f64) -> (i32, i32, i32, i32) 
 }
 
 // 判断光标是否落在解锁热点内。
+#[cfg(windows)]
 fn cursor_in_hotspot(x: i32, y: i32, left: i32, top: i32, right: i32, bottom: i32) -> bool {
     x >= left && x <= right && y >= top && y <= bottom
 }
@@ -280,7 +296,9 @@ fn tick_click_through_monitor(app: &AppHandle) {
     publish_click_through_state(app);
 }
 
-#[cfg(not(windows))]
+// 桌面专属：tick_click_through_monitor 的桩实现仅在非 Windows 的桌面目标编译
+// （Android/iOS 上引用它的 start_click_through_monitor 也不编译）。
+#[cfg(all(not(windows), desktop))]
 fn tick_click_through_monitor(_app: &AppHandle) {}
 
 fn save_window_state(app: &AppHandle, window: &tauri::WebviewWindow) {

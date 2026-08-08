@@ -197,6 +197,12 @@ export default async function viteConfig(_config: ConfigEnv): Promise<UserConfig
       format: 'es'
     },
     build: {
+      // 主 bundle（bootstrap-*.js）实际约 3.8 MB（gzip ~1.3 MB），由应用代码 +
+      // 相互交织的 UI 框架 vendor（pixi.js / react-three / framer-motion）构成。
+      // three.js 已通过 manualChunks 拆出（仍 724 kB），剩余 monolith 再做
+      // manualChunks 收益低（拆分后子块仍普遍 >500 kB），且改变运行时 chunk
+      // 加载顺序有回归风险，故仅把告警阈值提到略高于实际最大 chunk 的值。
+      chunkSizeWarningLimit: 4000,
       rollupOptions: {
         input: {
           main: 'index.html',

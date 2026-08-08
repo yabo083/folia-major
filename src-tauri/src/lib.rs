@@ -4,6 +4,7 @@
 // handoff/stage/obs/remote），此处只做注册（managed states + invoke_handler）。
 
 mod cache;
+#[cfg(desktop)]
 mod discord;
 mod handoff;
 mod kugou;
@@ -13,10 +14,12 @@ mod obs;
 mod remote;
 mod settings;
 mod stage;
+#[cfg(desktop)]
 mod thumbar;
 #[cfg(desktop)]
 mod updater;
 mod video_export;
+#[cfg(desktop)]
 mod voice;
 mod window;
 
@@ -36,15 +39,14 @@ void (async () => {
 pub fn run() {
     use tauri::Manager;
 
-    let mut builder = tauri::Builder::default();
+    let builder = tauri::Builder::default();
 
     #[cfg(desktop)]
-    {
-        builder = builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+    let builder = builder
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             window::focus_main_window(app);
-        }));
-        builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
-    }
+        }))
+        .plugin(tauri_plugin_updater::Builder::new().build());
 
     let app = builder
         .on_page_load(|webview, payload| {
@@ -94,6 +96,8 @@ pub fn run() {
 
             // M9 视频导出：一次性 write token 存储 + 主窗口 prepare/restore 快照。
             app.manage(video_export::VideoExportTokenStore::new());
+            // prepare/restore 快照仅桌面目标（移动端无 WebviewWindow 状态可恢复）。
+            #[cfg(desktop)]
             app.manage(video_export::VideoExportWindowState::new());
 
             // M10 自动更新：状态机（端点/公钥构建期注入，缺失即 fail closed）。
@@ -244,12 +248,12 @@ pub fn run() {
         .expect("error while building tauri application");
 
     // M8 退出清理：停止语音轮询、关闭 Discord IPC 连接（best-effort）。
-    app.run(|app_handle, event| {
+    app.run(|_app_handle, event| {
         if matches!(event, tauri::RunEvent::Exit) {
             #[cfg(desktop)]
-            voice::stop(app_handle);
+            voice::stop(_app_handle);
             #[cfg(desktop)]
-            discord::destroy(app_handle);
+            discord::destroy(_app_handle);
         }
     });
 }

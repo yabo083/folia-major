@@ -24,6 +24,7 @@ const DEFAULT_POLL_INTERVAL_MS: u64 = 1000;
 const START_CONFIRM_SAMPLES: u32 = 2;
 const STOP_CONFIRM_SAMPLES: u32 = 3;
 const REG_QUERY_TIMEOUT_MS: Duration = Duration::from_millis(5000);
+#[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 // -- pure parsing (spec source: test/unit/electron/voiceInputPause.test.ts) ---
@@ -178,9 +179,10 @@ fn query_windows_microphone_in_use(own_exe_path: &str) -> Option<bool> {
 /// discarded (`Stdio::null`). On exit (normal, error or kill) the reader
 /// thread is joined so the full output is parsed; `None` on spawn failure,
 /// non-zero exit or timeout.
-fn run_with_drain(mut command: std::process::Command, timeout: Duration) -> Option<String> {
+fn run_with_drain(command: std::process::Command, timeout: Duration) -> Option<String> {
     #[cfg(windows)]
     {
+        let mut command = command;
         use std::io::Read;
         use std::os::windows::process::CommandExt;
         use std::process::Stdio;

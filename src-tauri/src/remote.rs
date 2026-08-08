@@ -7,21 +7,26 @@
 //! `remote-control-snapshot`, and sends commands via `remote-control-send-command`
 //! (forwarded to the main window on `remote-control-command`).
 
+#[cfg(desktop)]
 use std::path::PathBuf;
 use std::sync::Mutex;
+#[cfg(desktop)]
 use std::time::Duration;
 
 use serde_json::{json, Value};
-use tauri::{
-    window::Color, AppHandle, Emitter, Manager, PhysicalSize, WebviewUrl, WebviewWindowBuilder,
-};
+#[cfg(desktop)]
+use tauri::{window::Color, PhysicalSize, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager};
 
+#[cfg(desktop)]
 use crate::handoff::WindowPlaybackHandoffStore;
 use crate::settings::SettingsStore;
 use crate::window::MainWindowState;
 
 pub const REMOTE_WINDOW_LABEL: &str = "remote";
+#[cfg(desktop)]
 const REMOTE_WINDOW_TITLE: &str = "Folia Remote";
+#[cfg(desktop)]
 const WINDOW_PLAYBACK_HANDOFF_REQUEST_TIMEOUT_MS: u128 = 800;
 
 /// Latest remote-control snapshot (managed state).
@@ -186,6 +191,8 @@ fn merge_remote_snapshot(
     merged
 }
 
+/// 桌面专属（resize_main_window 使用）；另有纯逻辑单元测试直接验证。
+#[cfg(any(desktop, test))]
 fn sanitize_video_export_size(width: f64, height: f64) -> Option<(u32, u32)> {
     let width = width.round();
     let height = height.round();

@@ -20,7 +20,9 @@ use std::time::Duration;
 
 use serde::Serialize;
 use tauri::ipc::InvokeBody;
-use tauri::{AppHandle, Manager, PhysicalPosition, PhysicalSize};
+use tauri::{AppHandle, Manager};
+#[cfg(desktop)]
+use tauri::{PhysicalPosition, PhysicalSize};
 use tauri_plugin_dialog::DialogExt;
 
 use crate::window::MAIN_WINDOW_LABEL;
@@ -126,6 +128,8 @@ fn build_save_file_name(default_name: &str, extension: &str) -> String {
 }
 
 /// 尺寸校验：round 后必须有限且 >=320，超过 3840 钳制（同 Electron sanitizeVideoExportSize）。
+/// 桌面专属（video_export_prepare_window 使用）；另有纯逻辑单元测试直接验证。
+#[cfg(any(desktop, test))]
 fn sanitize_export_size(width: f64, height: f64) -> Option<(u32, u32)> {
     let width = width.round();
     let height = height.round();
@@ -223,9 +227,11 @@ impl Default for VideoExportTokenStore {
 
 // ---------------------------------------------------------------------------
 // 主窗口 prepare/restore 快照模型（纯逻辑可单测）
+// 桌面专属：移动端没有可捕获/恢复的 WebviewWindow 全屏/最大化状态。
 // ---------------------------------------------------------------------------
 
 /// 恢复动作：fullscreen 优先于 maximized，否则仅恢复 bounds。
+#[cfg(any(desktop, test))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum RestoreAction {
     Bounds,
@@ -234,6 +240,7 @@ enum RestoreAction {
 }
 
 /// 导出准备前保存的主窗口原始状态（外部位移 + 内部尺寸 + 最大化/全屏）。
+#[cfg(any(desktop, test))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct WindowRestoreSnapshot {
     position: (i32, i32),
@@ -242,6 +249,7 @@ pub struct WindowRestoreSnapshot {
     fullscreen: bool,
 }
 
+#[cfg(any(desktop, test))]
 impl WindowRestoreSnapshot {
     /// 捕获主窗口原始状态；任一查询失败都如实报错（不做 unwrap_or(false) 静默降级），
     /// 因为错误的最大化/全屏状态会在恢复时把窗口恢复到错误的形状。
@@ -299,10 +307,13 @@ impl WindowRestoreSnapshot {
 }
 
 /// 主窗口导出状态：快照只保存一次、恢复只消费一次（幂等）。
+/// 桌面专属：移动端该状态无消费者，字段与方法均不编译。
+#[cfg(any(desktop, test))]
 pub struct VideoExportWindowState {
     inner: Mutex<Option<WindowRestoreSnapshot>>,
 }
 
+#[cfg(any(desktop, test))]
 impl VideoExportWindowState {
     pub fn new() -> Self {
         Self {
@@ -342,6 +353,7 @@ impl VideoExportWindowState {
     }
 }
 
+#[cfg(any(desktop, test))]
 impl Default for VideoExportWindowState {
     fn default() -> Self {
         Self::new()
@@ -596,6 +608,7 @@ pub fn video_export_write_file(
 
 /// prepare_window 的入参形状（camelCase `size`，字段即 width/height）。
 #[derive(serde::Deserialize)]
+#[cfg(desktop)]
 pub struct ValueSize {
     width: f64,
     height: f64,

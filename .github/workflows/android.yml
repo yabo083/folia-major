@@ -1,0 +1,161 @@
+# Android packaging: single signed arm64-v8a release APK for the tauri-rewrite
+# branch. Independent of linux.yml so an Android failure does not re-run Linux
+# (and vice versa). Triggered on push to tauri-rewrite or manually.
+#
+# Release signing (Task C, verified 2026-08-08):
+#   - `npx tauri android build --help` exposes NO keystore flags
+#     (no --keystore/--keystore-password/--keystore-alias), so signing is
+#     injected via Gradle exactly as documented in
+#     https://v2.tauri.app/distribute/sign/android/: keystore.properties +
+#     signingConfigs.release patched into gen/android/app/build.gradle.kts.
+#   - `--split-per-abi` IS supported natively by the CLI; combined with
+#     `--target aarch64` only the arm64-v8a APK is produced.
+#
+# Required GitHub Actions secrets (names MUST match exactly; without them the
+# release APK builds UNSIGNED with a warning):
+#   ANDROID_KEYSTORE_B64   base64 of the upload keystore (.jks/.keystore)
+#   ANDROID_KEYSTORE_PASS  keystore (store) password
+#   ANDROID_KEY_ALIAS      key alias
+#   ANDROID_KEY_PASS       key password
+
+name: Android ARM64 release APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - tauri-rewrite
+
+concurrency:
+  group: folia-android-build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CI: true
+  NODE_VERSION: 24
+
+jobs:
+  android:
+    name: Android ARM64 release APK
+    runs-on: ubuntu-22.04
+    steps:
+      # 消掉 checkout/内部 git init 的 `init.defaultBranch` hint（无害但刷屏）。
+      - name: Configure git default branch
+        run: git config --global init.defaultBranch main
+
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Install Android SDK components
+        uses: android-actions/setup-android@v4
+        with:
+          packages: tools platform-tools ndk;29.0.14206865
+
+      - name: Set NDK_HOME
+        run: |
+          echo "NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865" >> "$GITHUB_ENV"
+
+      - name: Cache Rust
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Initialize Android project
+        run: npx tauri android init --ci --skip-targets-install
+
+      - name: Configure Android release signing
+        env:
+          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          ANDROID_KEYSTORE_PASS: ${{ secrets.ANDROID_KEYSTORE_PASS }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASS: ${{ secrets.ANDROID_KEY_PASS }}
+        run: |
+          set -euo pipefail
+          cd src-tauri/gen/android
+          if [ -z "${ANDROID_KEYSTORE_B64:-}" ]; then
+            echo "::warning::ANDROID_KEYSTORE_B64 not set - building an UNSIGNED release APK. Configure ANDROID_KEYSTORE_B64/ANDROID_KEYSTORE_PASS/ANDROID_KEY_ALIAS/ANDROID_KEY_PASS secrets to sign."
+            exit 0
+          fi
+          # keystore 在 CI 内从 base64 还原（绝不入库）；storeFile 指向还原路径。
+          mkdir -p keystore
+          echo "$ANDROID_KEYSTORE_B64" | base64 -d > keystore/folia-release.keystore
+          cat > keystore.properties <<EOF
+          storeFile=$(pwd)/keystore/folia-release.keystore
+          storePassword=$ANDROID_KEYSTORE_PASS
+          keyAlias=$ANDROID_KEY_ALIAS
+          keyPassword=$ANDROID_KEY_PASS
+          EOF
+          # build.gradle.kts 每次由 `tauri android init` 重新生成，直接注入即可；
+          # 幂等：已含 signingConfigs（重复执行）则跳过避免重复追加。
+          if grep -q "signingConfigs" app/build.gradle.kts; then
+            echo "signingConfigs already present; skipping gradle patch"
+          else
+            awk 'BEGIN { inserted=0 }
+              /^    buildTypes \{/ && !inserted {
+                print "    signingConfigs {"
+                print "        create(\"release\") {"
+                print "            val keystorePropertiesFile = rootProject.file(\"keystore.properties\")"
+                print "            val keystoreProperties = Properties()"
+                print "            if (keystorePropertiesFile.exists()) {"
+                print "                keystoreProperties.load(java.io.FileInputStream(keystorePropertiesFile))"
+                print "            }"
+                print "            keyAlias = keystoreProperties[\"keyAlias\"] as String"
+                print "            keyPassword = keystoreProperties[\"keyPassword\"] as String"
+                print "            storeFile = file(keystoreProperties[\"storeFile\"] as String)"
+                print "            storePassword = keystoreProperties[\"storePassword\"] as String"
+                print "        }"
+                print "    }"
+                inserted = 1
+              }
+              { print }
+            ' app/build.gradle.kts > app/build.gradle.kts.tmp
+            mv app/build.gradle.kts.tmp app/build.gradle.kts
+            sed -i 's/        getByName("release") {/        getByName("release") {\n            signingConfig = signingConfigs.getByName("release")/' app/build.gradle.kts
+          fi
+          echo "--- patched app/build.gradle.kts ---"
+          grep -n "signingConfigs\|signingConfig =\|getByName(\"release\")" app/build.gradle.kts
+
+      - name: Verify NDK clang toolchain
+        run: |
+          NDK_BIN="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          echo "NDK_HOME: $NDK_HOME"
+          if [ -x "$NDK_BIN/aarch64-linux-android24-clang" ]; then
+            "$NDK_BIN/aarch64-linux-android24-clang" --version
+          else
+            echo "::error::aarch64-linux-android24-clang not found in $NDK_BIN"
+            ls -la "$NDK_BIN" || true
+            exit 1
+          fi
+
+      # 最小包体：release 是默认 profile（无 --debug）；--target aarch64 只编
+      # arm64-v8a；--split-per-abi 每 ABI 独立 APK → 恰好产出一个
+      # app-arm64-v8a-release.apk（签名）或 app-arm64-v8a-release-unsigned.apk。
+      - name: Build signed ARM64 release APK
+        run: npx tauri android build --ci --apk --target aarch64 --split-per-abi
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v5
+        with:
+          name: folia-android-arm64-release
+          if-no-files-found: error
+          path: src-tauri/gen/android/app/build/outputs/apk/**/*.apk

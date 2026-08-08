@@ -26,3 +26,4 @@ test-results/
 .codegraph/
 .cursor/
 NUL
+release-artifacts/

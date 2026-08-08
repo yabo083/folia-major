@@ -62,7 +62,9 @@ fn main() {
 }
 
 /// Common-Controls v6 dependency; identical to tauri-build's default
-/// `windows-app-manifest.xml`.
+/// `windows-app-manifest.xml`. Only linked into Windows MSVC targets (see the
+/// `#[cfg(windows)]` block in `main`), so it is dead on every other target.
+#[cfg(windows)]
 const COMMON_CONTROLS_V6_MANIFEST: &str = r#"<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
   <dependency>

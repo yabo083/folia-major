@@ -7,6 +7,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use tauri::{AppHandle, Manager, State};
+#[cfg(desktop)]
 use tauri_plugin_dialog::DialogExt;
 
 pub const APP_LOCALE_KEY: &str = "APP_LOCALE";
@@ -327,11 +328,14 @@ pub fn save_settings(
     }
     if key == DISCORD_RICH_PRESENCE_ENABLED {
         // M8 联动：Discord 开关变化 → 重新评估连接并广播 playback-sync 状态。
+        // Discord 模块仅桌面目标编译（mobile 无 Rich Presence）。
+        #[cfg(desktop)]
         crate::discord::refresh(&app);
         crate::remote::broadcast_playback_sync_bridge_status(&app);
     }
+    // M8 联动：语音输入暂停开关变化 → 启动/停止轮询并推送状态（仅桌面目标）。
+    #[cfg(desktop)]
     if key == VOICE_INPUT_PAUSE_ENABLED {
-        // M8 联动：语音输入暂停开关变化 → 启动/停止轮询并推送状态。
         crate::voice::sync_state(&app);
     }
     // M10 联动：更新相关设置变化 → 触发检查/下载/重置状态（镜像 main.cjs save-settings）。

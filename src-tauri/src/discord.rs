@@ -30,13 +30,21 @@ pub const DEFAULT_DISCORD_APPLICATION_ID: &str = "1518508445483925645";
 
 const DISCORD_PRESENCE_UPDATE_INTERVAL_MS: u128 = 15_000;
 const DISCORD_ACTIVITY_TYPE_LISTENING: u8 = 2;
+#[cfg(windows)]
 const DISCORD_HANDSHAKE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+#[cfg(windows)]
 const DISCORD_MAX_FRAME_BYTES: usize = 4 * 1024 * 1024;
 
+// 命名管道 IPC 线格式常量：仅 Windows 原生传输使用。
+#[cfg(windows)]
 const OP_HANDSHAKE: u32 = 0;
+#[cfg(windows)]
 const OP_FRAME: u32 = 1;
+#[cfg(windows)]
 const OP_CLOSE: u32 = 2;
+#[cfg(windows)]
 const OP_PING: u32 = 3;
+#[cfg(windows)]
 const OP_PONG: u32 = 4;
 
 // -- pure payload mapping (spec source: test/unit/discordPresence.test.ts) ----
@@ -260,6 +268,7 @@ enum FirstFrame {
 
 /// reader 轮询打断间隔：CancelSynchronousIo 后 sleep 再重试，保证落在
 /// read 系统调用间隙的 reader 也能被唤醒，join 必然在有限时间内返回。
+#[cfg(windows)]
 const DISCORD_READER_POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(5);
 
 /// 提取 evt == ERROR 帧的错误消息（握手后 Discord 拒绝 SET_ACTIVITY 等场景）。
@@ -330,6 +339,7 @@ fn stop_reader(reader: std::thread::JoinHandle<()>, cancel: &std::sync::atomic::
 /// （例如 Discord 正在重连、或另一客户端刚抢走实例）在有限时间内等到可用
 /// 实例，而不是立刻报 unavailable。加上 connect 内握手本身的
 /// DISCORD_HANDSHAKE_TIMEOUT，单次 open 最坏有界于二者之和（后台线程执行）。
+#[cfg(windows)]
 const DISCORD_PIPE_OPEN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
 #[cfg(windows)]
@@ -564,6 +574,8 @@ impl RpcConnection for IpcConnection {
 /// 把渲染层 camelCase 活动转换为 Discord RPC 线上格式（对应 @xhayper
 /// ClientUser.setActivity 的字段变换）：timestamps.start/end、assets.large_image/
 /// large_text/small_text、created_at。缺失字段按库的行为省略。
+/// 生产代码仅 Windows 命名管道传输引用；另有跨平台纯逻辑单元测试直接验证。
+#[cfg(any(windows, test))]
 pub fn discord_activity_wire_format(activity: &Value) -> Value {
     let mut formatted = serde_json::Map::new();
     formatted.insert(
@@ -630,6 +642,9 @@ pub fn discord_activity_wire_format(activity: &Value) -> Value {
     Value::Object(formatted)
 }
 
+/// Windows-only: writes a named-pipe frame (used by the IPC transport and its
+/// Windows test server).
+#[cfg(windows)]
 fn write_frame(writer: &Mutex<std::fs::File>, op: u32, body: &[u8]) -> Result<(), String> {
     use std::io::Write;
     let mut pipe = writer
@@ -644,11 +659,15 @@ fn write_frame(writer: &Mutex<std::fs::File>, op: u32, body: &[u8]) -> Result<()
     Ok(())
 }
 
+/// Windows-only: reads an exact-length named-pipe payload.
+#[cfg(windows)]
 fn read_exact(file: &mut std::fs::File, buf: &mut [u8]) -> std::io::Result<()> {
     use std::io::Read;
     file.read_exact(buf)
 }
 
+/// Windows-only: frame nonce for SET_ACTIVITY commands.
+#[cfg(windows)]
 fn generate_nonce() -> String {
     use rand::RngCore;
     let mut bytes = [0u8; 16];

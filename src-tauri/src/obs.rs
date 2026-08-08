@@ -56,7 +56,9 @@ struct ObsInner {
 }
 
 impl ObsBrowserSourceState {
-    /// Production constructor.
+    /// Production constructor. Desktop-only: the state is only managed on
+    /// desktop targets (mobile has no OBS browser source integration).
+    #[cfg(desktop)]
     pub fn new(app: &AppHandle) -> Self {
         let emit_app = app.clone();
         let emit = Arc::new(move |channel: &str, payload: Value| {
@@ -179,6 +181,8 @@ impl ObsBrowserSourceState {
     // -- server lifecycle -----------------------------------------------------
 
     /// Sync cached settings and start/stop the loopback server.
+    /// Desktop-only: invoked from the desktop setup path in lib.rs.
+    #[cfg(desktop)]
     pub fn sync_and_serve(&self, app: &AppHandle) -> Result<(), String> {
         let settings = app.state::<SettingsStore>();
         self.sync_from_settings(&settings);

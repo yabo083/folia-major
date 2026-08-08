@@ -416,6 +416,9 @@ struct PendingStore {
 }
 
 impl PendingStore {
+    /// Desktop-only production path (constructed inside `StageState::new`);
+    /// tests construct it indirectly through `StageState::for_test`.
+    #[cfg(any(desktop, test))]
     fn new() -> Self {
         Self {
             inner: Mutex::new(HashMap::new()),
@@ -538,6 +541,8 @@ struct SessionAssets {
 impl StageState {
     /// Production constructor: emits events to the main window and resolves the
     /// Netease search port from the managed Netease API server.
+    /// Desktop-only: the stage state is only managed on desktop targets.
+    #[cfg(any(desktop, test))]
     pub fn new(app: &AppHandle, app_data_dir: PathBuf) -> Self {
         let emit_app = app.clone();
         let emit = Arc::new(move |channel: &str, payload: Value| {
@@ -554,6 +559,9 @@ impl StageState {
         Self::with_components(sessions_root, emit, netease_port)
     }
 
+    /// Shared constructor: production (`new`) and tests (`for_test`) both route
+    /// here; only compiled where at least one caller exists.
+    #[cfg(any(desktop, test))]
     fn with_components(sessions_root: PathBuf, emit: EmitFn, netease_port: PortFn) -> Self {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(10))

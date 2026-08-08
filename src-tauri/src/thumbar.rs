@@ -14,16 +14,25 @@
 
 use serde_json::Value;
 use std::sync::{Mutex, OnceLock};
-use tauri::{AppHandle, Emitter, Manager};
+#[cfg(windows)]
+use tauri::Emitter;
+use tauri::{AppHandle, Manager};
 
+#[cfg(windows)]
 use crate::window::MAIN_WINDOW_LABEL;
 
 // Button ids must match the order Electron builds its thumbar buttons.
+// Windows-only: consumed by the `#[cfg(windows)] mod native` implementation.
+#[cfg(windows)]
 pub const THUMBAR_PREVIOUS: u32 = 1;
+#[cfg(windows)]
 pub const THUMBAR_PLAY_PAUSE: u32 = 2;
+#[cfg(windows)]
 pub const THUMBAR_NEXT: u32 = 3;
 
+#[cfg(windows)]
 const THUMBAR_ICON_SIZE: i32 = 16;
+#[cfg(windows)]
 const THUMBAR_SUBCLASS_ID: usize = 0x464f4c41; // 'FOLA'
 
 /// App handle used by the window subclass proc to forward clicks; set once in
@@ -38,8 +47,11 @@ pub struct ThumbarState {
 
 /// 每个 HWND 独立跟踪工具条安装状态：`toolbar_hwnd` 记录最后一次成功
 /// `ThumbBarAddButtons` 的 HWND，保证同一 HWND 只 Add 一次，后续一律 Update。
+/// 字段仅 Windows 原生实现读写；非 Windows 桌面目标上结构体为空壳。
 struct ThumbarInner {
+    #[cfg(windows)]
     subclassed_hwnd: Option<isize>,
+    #[cfg(windows)]
     toolbar_hwnd: Option<isize>,
 }
 
@@ -47,7 +59,9 @@ impl ThumbarState {
     pub fn new() -> Self {
         Self {
             inner: Mutex::new(ThumbarInner {
+                #[cfg(windows)]
                 subclassed_hwnd: None,
+                #[cfg(windows)]
                 toolbar_hwnd: None,
             }),
         }
@@ -93,6 +107,8 @@ pub fn parse_taskbar_state(state: &Value) -> TaskbarState {
 
 /// 纯状态机输出：给定某 HWND 的任务栏安装状态与播放状态，决定下一步操作。
 /// 纯逻辑、无平台依赖，供 Windows 实现调用并被单元测试直接验证。
+/// 仅在 Windows 生产代码与测试中引用；其他桌面目标下不编译。
+#[cfg(any(windows, test))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ToolbarAction {
     /// 该 HWND 从未 Add 过且无曲目：不调用任何任务栏 API（no-op）。
@@ -107,6 +123,7 @@ enum ToolbarAction {
 }
 
 /// 纯决策：`toolbar_hwnd == Some(hwnd)` 表示该 HWND 已安装工具条。
+#[cfg(any(windows, test))]
 fn decide_toolbar_action(
     toolbar_hwnd: Option<isize>,
     hwnd: isize,
@@ -127,6 +144,7 @@ fn decide_toolbar_action(
 
 /// 纯状态转移：任务栏 API 调用成功后更新 `toolbar_hwnd`。只有 Add 写入新 HWND；
 /// Update / Hide 保留原标记（隐藏后曲目恢复时仍走 Update 而非重复 Add）。
+#[cfg(any(windows, test))]
 fn mark_after_success(
     toolbar_hwnd: Option<isize>,
     hwnd: isize,
@@ -143,6 +161,7 @@ fn mark_after_success(
 /// Add，避免“Add 失败却已标记安装”导致永远走 Update 的错误。
 /// Windows 实现须在持有 `tracked` 锁期间调用本函数并提交返回的新状态，
 /// 使并发下“同一 HWND 只 Add 一次”的不变量成立（详见 `apply_buttons`）。
+#[cfg(any(windows, test))]
 fn step_serialized(
     installed: Option<isize>,
     hwnd: isize,
@@ -516,9 +535,8 @@ mod native {
 mod native {
     use super::*;
 
-    pub fn install_subclass(_hwnd: (), _tracked: &Mutex<ThumbarInner>) -> Result<(), String> {
-        Ok(())
-    }
+    // setup() 只在 Windows 上调用 native::install_subclass（见 setup 的
+    // `#[cfg(windows)]` 块），非 Windows 无需 stub。
 
     pub fn apply_buttons(
         _app: &AppHandle,
