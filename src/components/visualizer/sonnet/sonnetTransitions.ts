@@ -49,7 +49,7 @@ export const resolveSonnetTransitionEffectFrame = (
         return {
             x: 0,
             y: 0,
-            scale: 1,
+            scale: phase === 'exit' ? 1 + amount * 0.035 : 1 - amount * 0.035,
             rotation: 0,
             alpha: phase === 'exit' ? 1 - amount : 1 - amount * 0.82,
             blur: amount * 14,
@@ -77,8 +77,7 @@ export const resolveSonnetTransitionEffectFrame = (
     return {
         x: 0,
         y: 0,
-        // Scene filters use a viewport-sized render surface, so transition scaling exposes its bounds.
-        scale: 1,
+        scale: phase === 'exit' ? 1 + amount * 0.22 : 1 - amount * 0.18,
         rotation: 0,
         alpha: phase === 'exit' ? 1 - amount : 1 - amount * 0.72,
         blur: 0,

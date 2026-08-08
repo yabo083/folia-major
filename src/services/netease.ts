@@ -40,8 +40,15 @@ const getApiBase = async () => {
 
   if (isElectronRuntime()) {
     const port = await getElectronBridge().getNeteasePort();
-    API_BASE = `http://localhost:${port}`;
-    return API_BASE;
+    const numericPort = Number(port);
+    if (Number.isFinite(numericPort) && numericPort > 0) {
+      API_BASE = `http://localhost:${numericPort}`;
+      return API_BASE;
+    }
+    // Never cache a broken base: a missing/zero port means the local Netease
+    // proxy is not running. Reject so callers surface a visible error instead
+    // of silently failing forever against `http://localhost:0`.
+    throw new Error("Netease local API server is not running (no port).");
   }
 
   const configuredApiBase = getConfiguredApiBase();
@@ -54,7 +61,7 @@ const getApiBase = async () => {
 };
 
 const fetchWithCreds = async (endpoint: string, options: RequestInit = {}) => {
-  const base = await getApiBase();
+  const base = (await getApiBase()) ?? '';
   const url = `${base}${endpoint}`;
   // Ensure we send credentials to persist session (cookies)
   const defaultOptions: RequestInit = {
@@ -75,8 +82,8 @@ const fetchWithCreds = async (endpoint: string, options: RequestInit = {}) => {
     finalUrl = `${finalUrl}${separator}timestamp=${Date.now()}`;
   }
 
-  // Note: For Vercel hosted APIs, we rely on the `cookie` query param if cross-site cookies are blocked,
-  // or `credentials: 'include'` if the server allows it. 
+  // The local Tauri proxy accepts the session through a header. Keeping the
+  // cookie out of the URL avoids Windows/WebView2 and proxy URI length limits.
 
   const storedCookie = readProviderSessionValue('netease', 'cookie', ['netease_cookie']);
 
@@ -105,13 +112,17 @@ const fetchWithCreds = async (endpoint: string, options: RequestInit = {}) => {
     }
   }
 
-  if (cookieToUse) {
-    // Append cookie to URL
+  const headers = new Headers(defaultOptions.headers);
+  const isLocalProxy = /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/i.test(base);
+  if (cookieToUse && isLocalProxy) {
+    headers.set('X-Folia-Cookie', cookieToUse);
+  } else if (cookieToUse) {
+    // Hosted legacy adapters may only understand the query parameter.
     const sep = finalUrl.includes('?') ? '&' : '?';
     finalUrl = `${finalUrl}${sep}cookie=${encodeURIComponent(cookieToUse)}`;
   }
 
-  const res = await fetch(finalUrl, { ...defaultOptions, credentials: 'include' });
+  const res = await fetch(finalUrl, { ...defaultOptions, headers, credentials: 'include' });
   const data = await res.json();
 
   if (!storedCookie && cookieToUse && (data?.code === 301 || data?.code === 401 || data?.code === 403)) {

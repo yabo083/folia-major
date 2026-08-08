@@ -70,6 +70,7 @@ const NaviLyricMatchModal: React.FC<NaviLyricMatchModalProps> = ({ song, onClose
     const [isSearching, setIsSearching] = useState(false);
     const [selectedResult, setSelectedResult] = useState<SongResult | null>(null);
     const [isMatching, setIsMatching] = useState(false);
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
     // Initial config from cache
     const [initialMatchData, setInitialMatchData] = useState<NavidromeMatchData | null>(null);
@@ -117,6 +118,7 @@ const NaviLyricMatchModal: React.FC<NaviLyricMatchModalProps> = ({ song, onClose
         setIsSearching(true);
         setSearchResults([]);
         setSelectedResult(null);
+        setErrorMessage(null);
 
         try {
             const results = await searchLyricsByMatchSource(source, q, songInfo);
@@ -131,6 +133,7 @@ const NaviLyricMatchModal: React.FC<NaviLyricMatchModalProps> = ({ song, onClose
             }
         } catch (error) {
             console.error('Search failed:', error);
+            setErrorMessage(t('localMusic.searchFailed'));
         } finally {
             setIsSearching(false);
         }
@@ -144,6 +147,7 @@ const NaviLyricMatchModal: React.FC<NaviLyricMatchModalProps> = ({ song, onClose
         setIsSearching(true);
         setSearchResults([]);
         setSelectedResult(null);
+        setErrorMessage(null);
 
         void (async () => {
             try {
@@ -159,7 +163,10 @@ const NaviLyricMatchModal: React.FC<NaviLyricMatchModalProps> = ({ song, onClose
                     setSelectedResult(results[0]);
                 }
             } catch (error) {
-                console.error('Search failed:', error);
+                if (isCurrent) {
+                    console.error('Search failed:', error);
+                    setErrorMessage(t('localMusic.searchFailed'));
+                }
             } finally {
                 if (isCurrent) {
                     setIsSearching(false);
@@ -310,6 +317,11 @@ const NaviLyricMatchModal: React.FC<NaviLyricMatchModalProps> = ({ song, onClose
                         <div className="flex-1 overflow-y-auto custom-scrollbar px-4 pb-4">
                             {isSearching ? (
                                 <div className="flex justify-center items-center h-40"><Loader2 className="animate-spin opacity-50" size={28} /></div>
+                            ) : errorMessage ? (
+                                <div className={`flex flex-col items-center justify-center h-40 px-4 text-center ${isDaylight ? 'text-red-600' : 'text-red-300'}`}>
+                                    <p className="text-sm leading-relaxed">{errorMessage}</p>
+                                    <p className={`text-xs mt-2 ${textSecondary}`}>{t('localMusic.searchFailedHint')}</p>
+                                </div>
                             ) : searchResults.length === 0 ? (
                                 <div className={`flex flex-col items-center justify-center h-40 opacity-50 ${textSecondary}`}>
                                     <Music size={40} className="mb-2" />

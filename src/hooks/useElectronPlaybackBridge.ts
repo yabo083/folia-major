@@ -519,7 +519,8 @@ export const useElectronPlaybackBridge = ({
                     syncStageLyricsClock?.(nextTime, duration, taskbarPlayerStateRef.current);
                 }
                 currentTime.set(nextTime);
-                void window.electron?.publishRemoteControlSnapshot(buildRemoteSnapshot());
+                void window.electron?.publishRemoteControlSnapshot(buildRemoteSnapshot())
+                    .catch((error) => console.warn('[Electron] Failed to publish remote control snapshot', error));
                 publishDiscordPresenceSnapshot();
                 void publishStagePlayerPlaybackUpdate();
                 return;

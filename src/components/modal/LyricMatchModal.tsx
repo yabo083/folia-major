@@ -52,6 +52,7 @@ const LyricMatchModal: React.FC<LyricMatchModalProps> = ({ song, onClose, onMatc
     const [isSearching, setIsSearching] = useState(false);
     const [selectedResult, setSelectedResult] = useState<SongResult | null>(null);
     const [isMatching, setIsMatching] = useState(false);
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const searchRequestIdRef = useRef(0);
 
     const [source, setSource] = useState<LyricMatchSource>('netease');
@@ -134,6 +135,7 @@ const LyricMatchModal: React.FC<LyricMatchModalProps> = ({ song, onClose, onMatc
         setIsSearching(true);
         setSearchResults([]);
         setSelectedResult(null);
+        setErrorMessage(null);
 
         try {
             const results = await searchLyricsByMatchSource(activeSource, q, songInfo);
@@ -141,7 +143,10 @@ const LyricMatchModal: React.FC<LyricMatchModalProps> = ({ song, onClose, onMatc
 
             setSearchResults(results);
         } catch (error) {
-            console.error('Search failed:', error);
+            if (requestId === searchRequestIdRef.current) {
+                console.error('Search failed:', error);
+                setErrorMessage(t('localMusic.searchFailed'));
+            }
         } finally {
             if (requestId === searchRequestIdRef.current) {
                 setIsSearching(false);
@@ -345,6 +350,11 @@ const LyricMatchModal: React.FC<LyricMatchModalProps> = ({ song, onClose, onMatc
                             {isSearching ? (
                                 <div className="flex justify-center items-center h-40">
                                     <Loader2 className="animate-spin opacity-50" size={28} />
+                                </div>
+                            ) : errorMessage ? (
+                                <div className={`flex flex-col items-center justify-center h-40 px-4 text-center ${isDaylight ? 'text-red-600' : 'text-red-300'}`}>
+                                    <p className="text-sm leading-relaxed">{errorMessage}</p>
+                                    <p className={`text-xs mt-2 ${textSecondary}`}>{t('localMusic.searchFailedHint')}</p>
                                 </div>
                             ) : searchResults.length === 0 ? (
                                 <div className={`flex flex-col items-center justify-center h-40 opacity-50 ${textSecondary}`}>

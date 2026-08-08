@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Copy, Minus, Radio, Square, X } from 'lucide-react';
+import { Copy, Minus, Pin, PinOff, Radio, Square, X } from 'lucide-react';
 
 export default function WindowControls({
     revealed,
@@ -11,6 +11,7 @@ export default function WindowControls({
     isMainWindowClickThroughEnabled?: boolean;
 }) {
     const [isMaximized, setIsMaximized] = useState(false);
+    const [isAlwaysOnTop, setIsAlwaysOnTop] = useState(false);
     const electron = (window as any).electron;
 
     useEffect(() => {
@@ -19,6 +20,20 @@ export default function WindowControls({
         checkMaximize();
         window.addEventListener('resize', checkMaximize);
         return () => window.removeEventListener('resize', checkMaximize);
+    }, [electron]);
+
+    useEffect(() => {
+        if (!electron?.getMainWindowAlwaysOnTop) return;
+        const syncAlwaysOnTop = async () => {
+            try {
+                setIsAlwaysOnTop(Boolean(await electron.getMainWindowAlwaysOnTop()));
+            } catch (error) {
+                console.error('Failed to read main window always-on-top state', error);
+            }
+        };
+        void syncAlwaysOnTop();
+        window.addEventListener('focus', syncAlwaysOnTop);
+        return () => window.removeEventListener('focus', syncAlwaysOnTop);
     }, [electron]);
 
     if (!electron) return null;
@@ -59,9 +74,24 @@ export default function WindowControls({
                 className={remoteBtnClass}
                 title="Remote control"
                 tabIndex={remoteControlVisible ? 0 : -1}
-                onClick={() => void electron.openRemoteControl?.()}
+                onClick={() => void electron.toggleRemoteControl?.().catch((error: unknown) => console.error('Failed to toggle remote control window', error))}
             >
                 <Radio size={15} />
+            </button>
+            <button
+                className={btnClass}
+                title={isAlwaysOnTop ? 'Disable always on top' : 'Always on top'}
+                tabIndex={standardControlsVisible ? 0 : -1}
+                onClick={async () => {
+                    try {
+                        const current = Boolean(await electron.getMainWindowAlwaysOnTop());
+                        setIsAlwaysOnTop(Boolean(await electron.setMainWindowAlwaysOnTop(!current)));
+                    } catch (error) {
+                        console.error('Failed to toggle main window always-on-top state', error);
+                    }
+                }}
+            >
+                {isAlwaysOnTop ? <PinOff size={15} /> : <Pin size={15} />}
             </button>
             <button
                 className={btnClass}

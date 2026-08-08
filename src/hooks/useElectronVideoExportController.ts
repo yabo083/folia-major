@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import type React from 'react';
 import type { RefObject } from 'react';
 import type { MotionValue } from 'framer-motion';
-import type { SongResult } from '../types';
+import type { SongResult, StatusMessage } from '../types';
 import type { RemoteControlCommand } from '../types/remoteControl';
 import type { VideoExportPreset, VideoExportState } from '../types/videoExport';
 import { idleVideoExportState } from '../types/videoExport';
@@ -16,6 +16,12 @@ import {
     stopMediaStream,
     wait,
 } from '../services/electronVideoExport';
+import {
+    clearVideoExportPendingRequest,
+    consumeVideoExportPendingRequest,
+    createEmptyVideoExportPendingRequestState,
+    storeVideoExportPendingRequest,
+} from '../services/videoExportPendingRequest';
 
 // src/hooks/useElectronVideoExportController.ts
 // Records the real player window so audio.currentTime remains the single animation clock.
@@ -28,6 +34,7 @@ type UseElectronVideoExportControllerOptions = {
     currentSong: SongResult | null;
     setIsPlayerChromeHidden: React.Dispatch<React.SetStateAction<boolean>>;
     setIsPanelOpen: React.Dispatch<React.SetStateAction<boolean>>;
+    setStatusMsg: React.Dispatch<React.SetStateAction<StatusMessage | null>>;
     navigateToPlayer: () => void;
     pausePlayback: () => void;
     resumePlayback: () => Promise<void>;
@@ -46,6 +53,7 @@ export const useElectronVideoExportController = ({
     currentSong,
     setIsPlayerChromeHidden,
     setIsPanelOpen,
+    setStatusMsg,
     navigateToPlayer,
     pausePlayback,
     resumePlayback,
@@ -54,6 +62,7 @@ export const useElectronVideoExportController = ({
     const recorderRef = useRef<MediaRecorder | null>(null);
     const cancelRequestedRef = useRef(false);
     const runningRef = useRef(false);
+    const pendingExportRef = useRef(createEmptyVideoExportPendingRequestState());
 
     const stopActiveExport = useCallback((discard: boolean) => {
         cancelRequestedRef.current = discard;
@@ -279,22 +288,79 @@ export const useElectronVideoExportController = ({
 
     const handleExportCommand = useCallback((command: RemoteControlCommand) => {
         if (command.type === 'start-export') {
-            void startExport(command.preset, command.startMode);
+            // Remote IPC events carry no transient user activation inside the main
+            // document, so getDisplayMedia cannot start here. Store exactly one
+            // pending request, bring the main window forward, and ask the user to
+            // confirm with a real click on a persistent toast. Nothing is claimed
+            // about recording/preparing while the user has not confirmed.
+            if (runningRef.current) {
+                return true; // an export is already active; ignore the request
+            }
+            pendingExportRef.current = storeVideoExportPendingRequest(
+                pendingExportRef.current,
+                command.preset,
+                command.startMode,
+            );
+            const pending = pendingExportRef.current.pending!;
+            // Best-effort: bring the main window forward. Promise.resolve guards
+            // against `undefined.catch` when window.electron or focusMainWindow is
+            // absent; a real rejected promise is still swallowed.
+            void Promise.resolve(window.electron?.focusMainWindow?.()).catch(() => {});
+            setStatusMsg({
+                type: 'info',
+                text: t('export.remoteConfirmPrompt'),
+                actionLabel: t('export.remoteStartAction'),
+                cancelLabel: t('export.remoteStartCancel'),
+                persistent: true,
+                nonce: pending.nonce,
+                onAction: () => {
+                    // Only a non-stale callback may act: consume exactly-once, then
+                    // dismiss only a status whose nonce matches this request, and
+                    // invoke startExport in this same click call stack (no await /
+                    // microtask in between) so getDisplayMedia is initiated under
+                    // the main document's transient activation.
+                    const { state, request } = consumeVideoExportPendingRequest(
+                        pendingExportRef.current,
+                        pending.nonce,
+                    );
+                    if (request) {
+                        pendingExportRef.current = state;
+                        setStatusMsg(current => (current?.nonce === request.nonce ? null : current));
+                        void startExport(request.preset, request.startMode);
+                    }
+                },
+                onCancel: () => {
+                    // A stale cancel (a newer start request replaced this prompt)
+                    // must not dismiss the current prompt or an unrelated status.
+                    const { state, request } = consumeVideoExportPendingRequest(
+                        pendingExportRef.current,
+                        pending.nonce,
+                    );
+                    if (request) {
+                        pendingExportRef.current = state;
+                        setStatusMsg(current => (current?.nonce === request.nonce ? null : current));
+                    }
+                },
+            });
             return true;
         }
 
-        if (command.type === 'stop-export') {
-            stopActiveExport(false);
-            return true;
-        }
-
-        if (command.type === 'cancel-export') {
-            stopActiveExport(true);
+        if (command.type === 'stop-export' || command.type === 'cancel-export') {
+            // Stop/cancel cancels both a pending (unconfirmed) request and any
+            // active export. Capture the prompt nonce first, then dismiss only a
+            // status that still shows the export prompt — an unrelated status may
+            // have replaced it while the request stayed pending.
+            const promptNonce = pendingExportRef.current.pending?.nonce;
+            if (promptNonce !== undefined) {
+                pendingExportRef.current = clearVideoExportPendingRequest(pendingExportRef.current);
+                setStatusMsg(current => (current?.nonce === promptNonce ? null : current));
+            }
+            stopActiveExport(command.type === 'cancel-export');
             return true;
         }
 
         return false;
-    }, [startExport, stopActiveExport]);
+    }, [setStatusMsg, startExport, stopActiveExport, t]);
 
     // Automatically reset export status back to 'idle' after completion (3s) or error (4s)
     useEffect(() => {
@@ -314,6 +380,7 @@ export const useElectronVideoExportController = ({
 
     useEffect(() => () => {
         stopActiveExport(true);
+        pendingExportRef.current = clearVideoExportPendingRequest(pendingExportRef.current);
     }, [stopActiveExport]);
 
     return {

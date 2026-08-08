@@ -461,7 +461,6 @@ declare global {
     electron?: {
       getSettings: () => Promise<any>;
       saveSettings: (key: string, value: any) => Promise<any>;
-      setPlaybackDisplaySleepBlockingActive: (active: boolean) => Promise<boolean>;
       setAppLocale: (localeKey: 'en' | 'zh-CN' | 'in') => Promise<string>;
       getCacheDirectory: () => Promise<ElectronCacheDirectoryResult>;
       chooseCacheDirectory: () => Promise<ElectronCacheDirectoryResult>;
@@ -506,6 +505,7 @@ declare global {
       toggleMaximizeWindow: () => Promise<boolean>;
       toggleFullscreenWindow: () => Promise<boolean>;
       closeWindow: () => Promise<boolean>;
+      focusMainWindow: () => Promise<boolean>;
       isWindowMaximized: () => Promise<boolean>;
       getWindowTransparentMode: () => Promise<boolean>;
       setWindowTransparentMode: (

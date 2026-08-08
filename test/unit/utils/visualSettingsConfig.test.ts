@@ -105,8 +105,6 @@ describe('buildVisualSettingsConfig', () => {
             showFixedGeo: false,
             showBackgroundDecor: false,
             textureResolution: 1.75,
-            postProcessLensDistortion: 0.65,
-            postProcessLensDispersion: 0.45,
         };
         useSettingsUiStore.setState({ sonnetTuning });
 

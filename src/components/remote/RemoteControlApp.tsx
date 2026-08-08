@@ -38,10 +38,6 @@ const REMOTE_TITLEBAR_REVEAL_THRESHOLD = 44;
 
 type BackgroundMode = 'default' | 'cover' | 'transparent';
 
-const sendCommand = (command: RemoteControlCommand) => {
-    void window.electron?.sendRemoteControlCommand(command);
-};
-
 const readStoredVideoExportPresetValues = (): VideoExportPresetValues => {
     if (typeof window === 'undefined') {
         return DEFAULT_VIDEO_EXPORT_PRESET_VALUES;
@@ -114,6 +110,8 @@ const RemoteControlApp: React.FC = () => {
     const [windowControlsRevealed, setWindowControlsRevealed] = useState(false);
     const [isHovered, setIsHovered] = useState(false);
     const [showLyricsOverlay, setShowLyricsOverlay] = useState(false);
+    const [commandError, setCommandError] = useState(false);
+    const commandErrorTimerRef = useRef<number | null>(null);
     const isDraggingRef = useRef(false);
     const lastSeekTimeRef = useRef(0);
     const exportPresets = useMemo(() => createVideoExportPresets(presetValues), [presetValues]);
@@ -122,6 +120,33 @@ const RemoteControlApp: React.FC = () => {
     const widthFocusedRef = useRef(false);
     const heightFocusedRef = useRef(false);
     const isSavingRef = useRef(false);
+
+    // Send a remote control command to the main window. Commands must never
+    // fail silently: a rejected invoke (e.g. missing main window, IPC error)
+    // is logged and surfaced as a transient visible error in the remote UI.
+    const sendCommand = (command: RemoteControlCommand) => {
+        const promise = window.electron?.sendRemoteControlCommand?.(command);
+        if (!promise) {
+            return;
+        }
+        void promise.catch((error) => {
+            console.error('Remote control command failed', command, error);
+            setCommandError(true);
+            if (commandErrorTimerRef.current !== null) {
+                window.clearTimeout(commandErrorTimerRef.current);
+            }
+            commandErrorTimerRef.current = window.setTimeout(() => {
+                setCommandError(false);
+                commandErrorTimerRef.current = null;
+            }, 3000);
+        });
+    };
+
+    useEffect(() => () => {
+        if (commandErrorTimerRef.current !== null) {
+            window.clearTimeout(commandErrorTimerRef.current);
+        }
+    }, []);
 
     useEffect(() => {
         const activePreset = exportPresets.find(preset => preset.id === selectedPresetId);
@@ -202,12 +227,16 @@ const RemoteControlApp: React.FC = () => {
             if (mounted && current) {
                 setSnapshot(current as RemoteControlSnapshot);
             }
+        }).catch(error => {
+            console.error('Failed to load remote control snapshot', error);
         });
 
         void window.electron?.getRemoteControlAlwaysOnTop?.().then(nextAlwaysOnTop => {
             if (mounted) {
                 setAlwaysOnTop(Boolean(nextAlwaysOnTop));
             }
+        }).catch(error => {
+            console.error('Failed to read remote control always-on-top state', error);
         });
 
         const unsubscribe = window.electron?.onRemoteControlSnapshot?.(next => {
@@ -371,6 +400,25 @@ const RemoteControlApp: React.FC = () => {
                     />
                 )}
 
+                {/* Command failure toast: remote commands must not fail silently */}
+                <AnimatePresence>
+                    {commandError && (
+                        <motion.div
+                            key="command-error-toast"
+                            initial={{ opacity: 0, y: -8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: -8 }}
+                            transition={{ duration: 0.15 }}
+                            className={`absolute top-14 left-1/2 z-40 -translate-x-1/2 rounded-full px-3 py-1.5 text-[11px] font-semibold shadow-lg border pointer-events-none ${isDaylight
+                                ? 'bg-red-500/10 border-red-500/30 text-red-600'
+                                : 'bg-red-500/15 border-red-500/40 text-red-300'
+                                }`}
+                        >
+                            {t('remote.commandFailed')}
+                        </motion.div>
+                    )}
+                </AnimatePresence>
+
                 {/* Blurry gradient background */}
                 {backgroundMode !== 'transparent' && (
                     <div className="absolute inset-0 -z-10 overflow-hidden pointer-events-none transition-opacity duration-300">
@@ -410,9 +458,12 @@ const RemoteControlApp: React.FC = () => {
                 )}
 
                 <div
-                    className="absolute inset-x-0 top-0 z-20 h-11"
-                    style={dragStyle}
+                    className="pointer-events-none absolute inset-x-0 top-0 z-20 h-11"
                 >
+                    <div
+                        className="pointer-events-auto absolute inset-y-0 left-0 right-24"
+                        style={dragStyle}
+                    />
                     <div
                         className={`absolute right-2.5 top-2.5 flex items-center gap-1 transition duration-200 ${windowControlsRevealed ? 'opacity-100' : 'opacity-0'
                             }`}
@@ -462,7 +513,7 @@ const RemoteControlApp: React.FC = () => {
                             type="button"
                             title={t('remote.close')}
                             tabIndex={windowControlsRevealed ? 0 : -1}
-                            onClick={() => void window.electron?.closeRemoteControl?.()}
+                            onClick={() => void window.electron?.closeRemoteControl?.().catch(error => console.error('Failed to close remote control window', error))}
                             className={`flex h-6 w-6 items-center justify-center rounded-full transition ${isDaylight
                                 ? 'text-black/30 hover:bg-black/10 hover:text-black/80'
                                 : 'text-white/30 hover:bg-white/10 hover:text-white/80'

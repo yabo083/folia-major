@@ -49,8 +49,6 @@ describe('Sonnet settings', () => {
             enableTransitions: true,
             outerFrameMode: 'frame',
             textureResolution: 1.75,
-            postProcessLensDistortion: 1.8,
-            postProcessLensDispersion: 0.7,
         });
 
         expect(useSettingsUiStore.getState().sonnetTuning).toMatchObject({
@@ -61,8 +59,6 @@ describe('Sonnet settings', () => {
             enableTransitions: true,
             outerFrameMode: 'frame',
             textureResolution: 1.75,
-            postProcessLensDistortion: 1.8,
-            postProcessLensDispersion: 0.7,
         });
         expect(JSON.parse(storage.getItem('sonnet_tuning') ?? '{}')).toMatchObject({
             showOnlyText: true,
@@ -71,8 +67,6 @@ describe('Sonnet settings', () => {
             enableTransitions: true,
             outerFrameMode: 'frame',
             textureResolution: 1.75,
-            postProcessLensDistortion: 1.8,
-            postProcessLensDispersion: 0.7,
         });
     });
 
@@ -93,11 +87,5 @@ describe('Sonnet settings', () => {
         useSettingsUiStore.getState().handleSetVisualizerMode('sonnet');
         expect(useSettingsUiStore.getState().visualizerMode).toBe('sonnet');
         expect(useSettingsUiStore.getState().sonnetPerformanceWarningOpen).toBe(false);
-    });
-
-    it('allows the stronger lens distortion range without accepting out-of-range values', () => {
-        useSettingsUiStore.getState().handleSetSonnetTuning({ postProcessLensDistortion: 3 });
-
-        expect(useSettingsUiStore.getState().sonnetTuning.postProcessLensDistortion).toBe(2);
     });
 });

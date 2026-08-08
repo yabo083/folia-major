@@ -24,6 +24,7 @@ import { createLocalLibraryNavigation } from './components/app/navigation/create
 import { createPanelNavigation } from './components/app/navigation/createPanelNavigation';
 import { createOnlineGridViewCollection } from './components/app/home/gridViewCollectionAdapters';
 import { buildAppStyle } from './components/app/presentation/buildAppStyle';
+import { shouldUseCustomWindowRadius } from './components/app/presentation/windowChrome';
 import { buildDebugSnapshot } from './components/app/presentation/buildDebugSnapshot';
 import { buildHomeSurfacePresentation } from './components/app/presentation/buildHomeSurfacePresentation';
 import { buildPlayerViewFlags } from './components/app/presentation/buildPlayerViewFlags';
@@ -51,7 +52,6 @@ import { useKugouLibrary } from './hooks/useKugouLibrary';
 import { useOnlineProviderPlatform } from './hooks/useOnlineProviderPlatform';
 import { useAppPreferences } from './hooks/useAppPreferences';
 import { useElectronPlaybackBridge } from './hooks/useElectronPlaybackBridge';
-import { useElectronDisplaySleepBlocker } from './hooks/useElectronDisplaySleepBlocker';
 import { useElectronNeteaseApiStatus } from './hooks/useElectronNeteaseApiStatus';
 import { useElectronVideoExportController } from './hooks/useElectronVideoExportController';
 import { useElectronWindowPlaybackHandoff } from './hooks/useElectronWindowPlaybackHandoff';
@@ -103,6 +103,7 @@ export default function App() {
     const { t } = useTranslation();
     const isDev = import.meta.env.DEV;
     const isElectronWindow = Boolean((window as typeof window & { electron?: unknown; }).electron);
+    const isTauriWindow = Boolean((window as typeof window & { __TAURI_INTERNALS__?: unknown; }).__TAURI_INTERNALS__);
     const [isTitlebarRevealed, setIsTitlebarRevealed] = useState(false);
     const [showTransparentWindowBorder, setShowTransparentWindowBorder] = useState(false);
     const [isMainWindowClickThroughEnabled, setIsMainWindowClickThroughEnabled] = useState(false);
@@ -382,8 +383,6 @@ export default function App() {
         handleToggleOpenPlayerOnLaunch,
         voiceInputPauseEnabled,
         handleToggleVoiceInputPause,
-        preventDisplaySleepDuringPlayback,
-        handleTogglePreventDisplaySleepDuringPlayback,
         handleToggleMediaCache,
         handleSetBackgroundOpacity,
         setDaylightPreference,
@@ -427,11 +426,6 @@ export default function App() {
         handleToggleMute,
         handleToggleLoopMode,
     } = appPreferences;
-
-    useElectronDisplaySleepBlocker(
-        preventDisplaySleepDuringPlayback,
-        playerState === PlayerState.PLAYING,
-    );
 
     const visualizerTunings = useMemo(() => ({
         classic: classicTuning,
@@ -1490,6 +1484,7 @@ export default function App() {
         currentSong,
         setIsPlayerChromeHidden,
         setIsPanelOpen,
+        setStatusMsg,
         navigateToPlayer,
         pausePlayback,
         resumePlayback,
@@ -1979,10 +1974,6 @@ export default function App() {
         toggleVoiceInputPause: () => {
             handleToggleVoiceInputPause(!voiceInputPauseEnabled);
         },
-        preventDisplaySleepDuringPlayback,
-        togglePreventDisplaySleepDuringPlayback: () => {
-            handleTogglePreventDisplaySleepDuringPlayback(!preventDisplaySleepDuringPlayback);
-        },
         setAppLanguagePreference: handleSetAppLanguagePreference,
         runAutoMatchBestLyric: handleAutoMatchBestLyricForCurrentSong,
         setIsUserGuideModalOpen,
@@ -2030,8 +2021,6 @@ export default function App() {
         toggleDaylightMode,
         voiceInputPauseEnabled,
         handleToggleVoiceInputPause,
-        preventDisplaySleepDuringPlayback,
-        handleTogglePreventDisplaySleepDuringPlayback,
 
         subtitleContentMode,
         subtitleOverlayBackground,
@@ -2943,7 +2932,11 @@ export default function App() {
             appStyle={appStyle}
             isElectronWindow={isElectronWindow}
             usesCustomWindowChrome={usesCustomWindowChrome}
-            useCustomWindowRadius={isElectronWindow && transparentPlayerBackground}
+            useCustomWindowRadius={shouldUseCustomWindowRadius({
+                hasElectronBridge: isElectronWindow,
+                isTauriRuntime: isTauriWindow,
+                transparentPlayerBackground,
+            })}
             showTransparentWindowBorder={showTransparentWindowBorder}
             isPlayerView={isPlayerView}
             isTitlebarRevealed={isTitlebarRevealed}
@@ -2956,10 +2949,17 @@ export default function App() {
                 if (!nextEnabled) {
                     setIsClickThroughToggleHotspotActive(false);
                 }
-                void window.electron?.setMainWindowClickThroughEnabled?.(nextEnabled);
-                if (!nextEnabled) {
-                    void window.electron?.setMainWindowClickThroughUnlockHover?.(false);
-                }
+                void (async () => {
+                    try {
+                        await window.electron?.setMainWindowClickThroughEnabled?.(nextEnabled);
+                        if (!nextEnabled) {
+                            await window.electron?.setMainWindowClickThroughUnlockHover?.(false);
+                        }
+                    } catch (error) {
+                        console.error('Failed to toggle main window click-through state', error);
+                        setIsClickThroughToggleHotspotActive(false);
+                    }
+                })();
             }}
             audioElement={<audio
                 ref={audioRef}

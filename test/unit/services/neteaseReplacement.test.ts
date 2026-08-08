@@ -196,7 +196,7 @@ describe('netease unavailable song replacement', () => {
             await neteaseApi.getSongUrl(12345);
 
             expect(fetchMock).toHaveBeenCalledTimes(1);
-            expect(String(fetchMock.mock.calls[0]?.[0])).toContain('cookie=real-login-cookie');
+            expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get('X-Folia-Cookie')).toBe('real-login-cookie');
             expect(String(fetchMock.mock.calls[0]?.[0])).not.toContain('register/anonimous');
             expect(storageMap['netease_anonymous_cookie']).toBeUndefined();
         });
@@ -213,7 +213,7 @@ describe('netease unavailable song replacement', () => {
 
             expect(fetchMock).toHaveBeenCalledTimes(2);
             expect(String(fetchMock.mock.calls[0]?.[0])).toContain('/register/anonimous');
-            expect(String(fetchMock.mock.calls[1]?.[0])).toContain('cookie=anon-cookie-value');
+            expect(new Headers(fetchMock.mock.calls[1]?.[1]?.headers).get('X-Folia-Cookie')).toBe('anon-cookie-value');
             expect(storageMap['online_provider:netease:anonymous_cookie']).toBe('anon-cookie-value');
         });
 
@@ -226,7 +226,7 @@ describe('netease unavailable song replacement', () => {
             await neteaseApi.getSongUrl(12345);
 
             expect(fetchMock).toHaveBeenCalledTimes(1);
-            expect(String(fetchMock.mock.calls[0]?.[0])).toContain('cookie=cached-anon-cookie');
+            expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get('X-Folia-Cookie')).toBe('cached-anon-cookie');
             expect(String(fetchMock.mock.calls[0]?.[0])).not.toContain('register/anonimous');
         });
 

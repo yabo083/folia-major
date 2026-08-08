@@ -51,8 +51,6 @@ const createContext = (overrides: Partial<CommandPaletteContext> = {}): CommandP
     voiceInputPauseEnabled: false,
     voiceInputPauseSupported: false,
     toggleVoiceInputPause: vi.fn(),
-    preventDisplaySleepDuringPlayback: false,
-    togglePreventDisplaySleepDuringPlayback: vi.fn(),
     setAppLanguagePreference: vi.fn(async () => undefined),
     runAutoMatchBestLyric: vi.fn(async () => true),
     setIsUserGuideModalOpen: vi.fn(),
@@ -513,19 +511,6 @@ describe('command palette registry', () => {
             expect(topMatch.command.id).toBe('desktop-toggle-main-window-always-on-top');
             await topMatch.command.execute('', context);
             expect(context.toggleMainWindowAlwaysOnTop).toHaveBeenCalled();
-        } finally {
-            vi.unstubAllGlobals();
-        }
-    });
-
-    it('matches and executes the desktop display sleep toggle', async () => {
-        vi.stubGlobal('window', { electron: {} });
-        try {
-            const context = createContext();
-            const [match] = getCommandPaletteMatches('播放时阻止休眠', context);
-            expect(match.command.id).toBe('desktop-toggle-prevent-display-sleep');
-            await match.command.execute('', context);
-            expect(context.togglePreventDisplaySleepDuringPlayback).toHaveBeenCalled();
         } finally {
             vi.unstubAllGlobals();
         }

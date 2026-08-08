@@ -1,0 +1,76 @@
+[package]
+name = "folia-tauri"
+version = "0.6.12"
+description = "Folia (Tauri 二开) - Lyrics Reimagine"
+authors = ["chthollyphile"]
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "folia_tauri_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+aes = "0.8"
+axum = { version = "0.8", features = ["multipart", "ws"] }
+base64 = "0.22"
+block-padding = "0.3"
+cbc = { version = "0.1", features = ["alloc"] }
+ecb = { version = "0.1", features = ["alloc"] }
+flate2 = "1"
+hex = "0.4"
+md-5 = "0.10"
+qrcode = { version = "0.14", default-features = false, features = ["svg"] }
+rand = "0.8"
+reqwest = { version = "0.13", default-features = false, features = ["json", "gzip", "brotli", "charset", "http2", "native-tls"] }
+rsa = { version = "0.9", features = ["pem", "hazmat"] }
+semver = "1.0.28"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha1 = "0.10"
+sha2 = "0.10"
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-updater = "2"
+tokio = { version = "1", features = ["full"] }
+tokio-stream = { version = "0.1", features = ["sync"] }
+tokio-util = { version = "0.7", features = ["io"] }
+url = "2"
+
+[dev-dependencies]
+tokio-tungstenite = "0.29"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_Shell",
+    "Win32_System_Com",
+    "Win32_Graphics_Dwm",
+    "Win32_Graphics_Gdi",
+    # discord.rs：reader 取消（CancelSynchronousIo，句柄复用 JoinHandle 原生句柄）
+    # 与测试用命名管道服务器
+    "Win32_System_IO",
+    "Win32_System_Pipes",
+    "Win32_Storage_FileSystem",
+    "Win32_Security",
+] }
+
+[profile.release]
+strip = true
+lto = false
+panic = "abort"
+codegen-units = 16
+opt-level = "s"
+
+[profile.dev]
+debug = 1
+
+[profile.test]
+debug = 1

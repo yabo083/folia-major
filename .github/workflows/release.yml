@@ -1,0 +1,166 @@
+# .github/workflows/release.yml
+# M10 自动更新：Windows 发布构建 —— 产出**签名** NSIS 安装包 + tauri updater 签名（.sig）
+# 与通道 manifest（latest.json / beta.json / alpha.json），仅上传 Actions artifact，**不发布**。
+#
+# 触发：手动 workflow_dispatch（选择通道 realeco=stable / limo=beta / cielo=nightly）。
+# 每次构建前必须配置以下 GitHub repository 设置，缺失即构建失败（fail closed）：
+#
+#   Secrets（Settings > Secrets and variables > Actions）：
+#     TAURI_SIGNING_PRIVATE_KEY            必填。更新签名私钥（tauri signer generate -w 输出的 base64）。
+#     TAURI_SIGNING_PRIVATE_KEY_PASSWORD   签名私钥密码（无密码则留空/省略）。
+#     FOLIA_UPDATE_PUBKEY                  必填。与私钥配对的公钥（tauri signer generate 打印的 base64）。
+#     FOLIA_WINDOWS_SIGNING_CERT_BASE64    可选。Windows 代码签名证书（PFX 的 base64）；提供后安装包也会被 signtool 签名。
+#     FOLIA_WINDOWS_SIGNING_CERT_PASSWORD  可选。上述证书密码。
+#   Variables（Settings > Secrets and variables > Actions > Variables）：
+#     FOLIA_UPDATE_ENDPOINTS     必填。JSON：{"realeco":"https://<host>/latest.json","limo":"https://<host>/beta.json","cielo":"https://<host>/alpha.json"}
+#                                该 JSON 在 `npx tauri build` 编译期注入 Rust（option_env!），运行时失效即禁用更新。
+#     FOLIA_UPDATE_ASSET_BASE_URL 必填。安装包托管根 URL（manifest 里 windows-x86_64.url 的基址），如 https://releases.example.com/folia/
+#     FOLIA_RELEASES_URL          必填。GitHub releases 页 URL，用于"打开发布页"与 updateUrl 展示。
+#
+# 说明：
+#   - 更新签名在 `tauri build` 内完成（需 TAURI_SIGNING_PRIVATE_KEY）；.sig 与安装包一起产出。
+#   - 可选代码签名必须在**更新签名之后**用 signtool 重签，然后再用 `tauri signer sign` 重新生成 .sig，
+#     否则更新签名与内容不匹配（顺序错误会让更新校验失败）。
+#   - 本工作流只 upload-artifact；发布（gh release create / 上传 GitHub Release）由维护者另行手工完成。
+
+name: updater-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: Release lane to publish this build into (realeco=stable, limo=beta, cielo=nightly)
+        type: choice
+        required: true
+        default: realeco
+        options:
+          - realeco
+          - limo
+          - cielo
+      ref:
+        description: Git ref to build (branch or tag; defaults to the ref the workflow runs on)
+        type: string
+        required: false
+
+env:
+  CI: true
+  FOLIA_UPDATE_ENDPOINTS: ${{ vars.FOLIA_UPDATE_ENDPOINTS }}
+  FOLIA_UPDATE_ASSET_BASE_URL: ${{ vars.FOLIA_UPDATE_ASSET_BASE_URL }}
+  FOLIA_UPDATE_PUBKEY: ${{ secrets.FOLIA_UPDATE_PUBKEY }}
+  FOLIA_RELEASES_URL: ${{ vars.FOLIA_RELEASES_URL }}
+  TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+  TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Verify updater configuration (fail closed)
+        shell: bash
+        run: |
+          test -n "$TAURI_SIGNING_PRIVATE_KEY" || { echo "::error::Secret TAURI_SIGNING_PRIVATE_KEY is required to sign updater artifacts"; exit 1; }
+          test -n "$FOLIA_UPDATE_PUBKEY" || { echo "::error::Secret FOLIA_UPDATE_PUBKEY is required to verify updater signatures"; exit 1; }
+          test -n "$FOLIA_UPDATE_ENDPOINTS" || { echo "::error::Variable FOLIA_UPDATE_ENDPOINTS is required (baked into the binary at compile time)"; exit 1; }
+          test -n "$FOLIA_UPDATE_ASSET_BASE_URL" || { echo "::error::Variable FOLIA_UPDATE_ASSET_BASE_URL is required for the channel manifest"; exit 1; }
+          test -n "$FOLIA_RELEASES_URL" || { echo "::error::Variable FOLIA_RELEASES_URL is required for release links"; exit 1; }
+          node --input-type=module - <<'NODE'
+          const endpoints = JSON.parse(process.env.FOLIA_UPDATE_ENDPOINTS);
+          for (const channel of ['realeco', 'limo', 'cielo']) {
+            if (typeof endpoints[channel] !== 'string' || !/^https:\/\//i.test(endpoints[channel])) {
+              throw new Error(`FOLIA_UPDATE_ENDPOINTS.${channel} must be an HTTPS URL`);
+            }
+          }
+          if (!/^https:\/\//i.test(process.env.FOLIA_RELEASES_URL)) {
+            throw new Error('FOLIA_RELEASES_URL must be an HTTPS URL');
+          }
+          const pubkey = Buffer.from(process.env.FOLIA_UPDATE_PUBKEY, 'base64');
+          if (pubkey.length !== 32) {
+            throw new Error('FOLIA_UPDATE_PUBKEY must decode to a 32-byte Ed25519 public key');
+          }
+          NODE
+          package_version=$(node -p "require('./package.json').version")
+          tauri_version=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          test "$package_version" = "$tauri_version" || { echo "::error::package.json and tauri.conf.json versions differ"; exit 1; }
+
+      - name: Build frontend
+        run: npm run build:tauri
+
+      - name: Build signed NSIS + updater artifacts
+        run: npx tauri build --bundles nsis --config .github/release-config.json
+
+      - name: Read version
+        id: version
+        shell: bash
+        run: echo "value=$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Windows code-sign installer (optional)
+        if: ${{ secrets.FOLIA_WINDOWS_SIGNING_CERT_BASE64 != '' }}
+        shell: pwsh
+        env:
+          CERT_B64: ${{ secrets.FOLIA_WINDOWS_SIGNING_CERT_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.FOLIA_WINDOWS_SIGNING_CERT_PASSWORD }}
+        run: |
+          $exe = "src-tauri/target/release/bundle/nsis/Folia_${{ steps.version.outputs.value }}_x64-setup.exe"
+          $cert = Join-Path $env:RUNNER_TEMP 'folia-code-sign.pfx'
+          [IO.File]::WriteAllBytes($cert, [Convert]::FromBase64String($env:CERT_B64))
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Recurse -Filter signtool.exe |
+            Sort-Object FullName -Descending | Select-Object -First 1 -ExpandProperty FullName
+          if (-not $signtool) { throw 'signtool.exe not found in Windows SDK' }
+          & $signtool sign /f $cert /p $env:CERT_PASSWORD /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 $exe
+          if ($LASTEXITCODE -ne 0) { throw "signtool failed with exit code $LASTEXITCODE" }
+
+      - name: Re-sign updater signature after code signing (optional)
+        if: ${{ secrets.FOLIA_WINDOWS_SIGNING_CERT_BASE64 != '' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          exe="src-tauri/target/release/bundle/nsis/Folia_${{ steps.version.outputs.value }}_x64-setup.exe"
+          # 从 TAURI_SIGNING_PRIVATE_KEY / TAURI_SIGNING_PRIVATE_KEY_PASSWORD 环境变量读取密钥（与 tauri build 同格式）。
+          npx tauri signer sign -p "$TAURI_SIGNING_PRIVATE_KEY_PASSWORD" "$exe"
+
+      - name: Generate channel update manifest
+        shell: bash
+        env:
+          BASE_URL: ${{ vars.FOLIA_UPDATE_ASSET_BASE_URL }}
+        run: |
+          set -euo pipefail
+          exe="src-tauri/target/release/bundle/nsis/Folia_${{ steps.version.outputs.value }}_x64-setup.exe"
+          node scripts/generate-update-manifest.mjs \
+            --channel "${{ inputs.channel }}" \
+            --version "${{ steps.version.outputs.value }}" \
+            --setup-exe "$exe" \
+            --signature-file "$exe.sig" \
+            --base-url "$BASE_URL" \
+            --out "src-tauri/target/release/bundle/nsis/${{ inputs.channel == 'realeco' && 'latest' || inputs.channel == 'limo' && 'beta' || 'alpha' }}.json"
+
+      - name: Upload updater artifacts (never publish)
+        uses: actions/upload-artifact@v4
+        with:
+          name: folia-updater-${{ inputs.channel }}-v${{ steps.version.outputs.value }}
+          if-no-files-found: error
+          path: |
+            src-tauri/target/release/bundle/nsis/Folia_${{ steps.version.outputs.value }}_x64-setup.exe
+            src-tauri/target/release/bundle/nsis/Folia_${{ steps.version.outputs.value }}_x64-setup.exe.sig
+            src-tauri/target/release/bundle/nsis/*.json

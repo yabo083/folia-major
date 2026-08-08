@@ -302,17 +302,12 @@ export const buildSonnetScene = (
 
 
     if (!showOnlyText) {
-        const sceneFilters = applySonnetScenePostProcess(
+        postProcessFilters.push(...applySonnetScenePostProcess(
             pixi,
             container,
             postProcessProfile,
             sceneSeed,
-        );
-        if (sceneFilters.length > 0) {
-            // Keep full-scene shaders in viewport space even when visible lyric/decor bounds are smaller.
-            container.filterArea = new pixi.Rectangle(0, 0, width, height);
-            postProcessFilters.push(...sceneFilters);
-        }
+        ));
     }
     const transitionBlurFilter = options.tuning.enableTransitions && !options.staticMode
         ? new pixi.BlurFilter({ strength: 0, quality: 1, kernelSize: 5, resolution: 0.5 })

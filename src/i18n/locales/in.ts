@@ -1071,7 +1071,7 @@ export default {
   },
   "releaseNotes": {
     "v0_6_12": {
-      "intro": "Berikut fitur dan peningkatan baru pada versi 0.6.14.",
+      "intro": "Berikut fitur dan peningkatan baru pada versi 0.6.12.",
       "sonnetLayout": {
         "title": "Mesin Tata Letak Sonnet Baru",
         "description": "Mesin tata letak visualizer Sonnet telah dibangun ulang untuk tipografi lirik yang lebih indah, seimbang, dan stabil."
@@ -1138,6 +1138,9 @@ export default {
     "windowResizeFailed": "Gagal mengubah ukuran jendela pemutar ke resolusi ekspor.",
     "recordingCancelled": "Perekaman dibatalkan.",
     "recorderUnknownError": "Perekam mengalami kesalahan yang tidak diketahui.",
+    "remoteConfirmPrompt": "Remote meminta ekspor video. Mulai merekam sekarang?",
+    "remoteStartAction": "Mulai Merekam",
+    "remoteStartCancel": "Batal",
   },
   "player": {
     "unknownArtist": "Artis Tidak Dikenal",
@@ -1195,6 +1198,8 @@ export default {
     "skipOnlineMatch": "Lewati Kecocokan Online",
     "saving": "Menyimpan...",
     "matchFailed": "Gagal mengambil lirik untuk lagu yang dipilih",
+    "searchFailed": "Pencarian lirik gagal. Layanan musik online mungkin tidak tersedia.",
+    "searchFailedHint": "Coba lagi, atau ganti ke sumber lain di atas.",
     "noLyricsAvailable": "Lirik tidak tersedia",
     "dontUseOnlineMetadata": "Jangan gunakan metadata online",
     "notALocalSong": "Bukan lagu lokal",
@@ -1445,6 +1450,7 @@ export default {
     "pause": "Jeda",
     "transparentControls": "Kontrol Transparan",
     "videoExport": "Ekspor Video",
+    "commandFailed": "Perintah gagal",
   },
   "aiHelp": {
     "openButton": "Butuh bantuan?",

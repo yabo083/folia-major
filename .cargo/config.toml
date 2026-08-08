@@ -1,0 +1,3 @@
+# `rust-lld.exe` is installed by `cargo install cargo-binutils`.
+[target.x86_64-pc-windows-msvc]
+linker = "rust-lld.exe"

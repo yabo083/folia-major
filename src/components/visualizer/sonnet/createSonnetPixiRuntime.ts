@@ -8,8 +8,6 @@ import {
     easeSonnetInOut,
     resolveSegmentProgress,
     resolveSonnetAnimationScale,
-    resolveSonnetBreathWeight,
-    resolveSonnetCameraBreath,
     resolveSonnetFocusWeights,
     resolveSonnetSmoothedCameraFocus,
     resolveShotMotionFrame,
@@ -36,7 +34,6 @@ import {
     resolveSonnetCreditsFrame,
 } from './sonnetCredits';
 import { sonnetDebugState } from './sonnetDebug';
-import { resolveSonnetSegmentCameraFocus } from './sonnetCameraTracking';
 
 // src/components/visualizer/sonnet/createSonnetPixiRuntime.ts
 // Owns Pixi lifecycle and mutates bounded scene views directly from absolute playback time.
@@ -363,33 +360,50 @@ export class SonnetPixiRuntime {
 
         const shake = resolveTimelineShake(time, shakeIntensity);
 
-        let trackSegments = view.segments.filter(s => s.role !== 'decoration' && s.trackingGlyphs.length > 0);
+        let trackSegments = view.segments.filter(s => s.role !== 'decoration' && s.glyphs.length > 0);
         if (trackSegments.length === 0) {
-            trackSegments = view.segments.filter(s => s.trackingGlyphs.length > 0);
-        }
-
-        // Layer a deterministic breathing float once the lyric reveal completes, so the
-        // frame never goes fully static while the shot holds or drifts through a gap.
-        const revealDoneTime = trackSegments.length > 0
-            ? Math.max(...trackSegments.map(segment => segment.trackingGlyphs.at(-1)?.startTime ?? view.shot.endTime))
-            : view.shot.endTime;
-        const breathWeight = resolveSonnetBreathWeight(time, revealDoneTime);
-        if (breathWeight > 0) {
-            const breathPhase = (hashSonnetSeed(view.shot.id) % 1024) / 1024 * Math.PI * 2;
-            const breath = resolveSonnetCameraBreath(time, breathPhase);
-            cameraFrame.x += breath.x * breathWeight;
-            cameraFrame.y += breath.y * breathWeight;
-            cameraFrame.scale += breath.scale * breathWeight;
-            cameraFrame.rotation += breath.rotation * breathWeight;
+            trackSegments = view.segments.filter(s => s.glyphs.length > 0);
         }
 
         let currentFocusX = view.basePivotX;
         let currentFocusY = view.basePivotY;
 
         if (trackSegments.length > 0) {
+            const getSegmentFocus = (seg: typeof view.segments[0], t: number) => {
+                if (seg.glyphs.length === 0) return { x: 0, y: 0 };
+                const first = seg.glyphs[0];
+                const last = seg.glyphs[seg.glyphs.length - 1];
+                
+                // Dampen the tracking distance to prevent the camera from advancing too fast
+                // and pushing settled text off the screen edge. Raised alongside the closer
+                // base zoom so the current word stays near the middle of the frame.
+                const trackingFactor = 0.5;
+                const segCenterX = (first.baseX + last.baseX) / 2;
+                const segCenterY = (first.baseY + last.baseY) / 2;
+                const applyFactor = (exactX: number, exactY: number) => ({
+                    x: segCenterX + (exactX - segCenterX) * trackingFactor,
+                    y: segCenterY + (exactY - segCenterY) * trackingFactor
+                });
+
+                if (t <= first.startTime) return applyFactor(first.baseX, first.baseY);
+                if (t >= last.startTime) return applyFactor(last.baseX, last.baseY);
+                
+                for (let i = 0; i < seg.glyphs.length - 1; i++) {
+                    if (t >= seg.glyphs[i].startTime && t <= seg.glyphs[i+1].startTime) {
+                        const g1 = seg.glyphs[i];
+                        const g2 = seg.glyphs[i+1];
+                        const p = (t - g1.startTime) / Math.max(0.001, g2.startTime - g1.startTime);
+                        const exactX = g1.baseX + (g2.baseX - g1.baseX) * p;
+                        const exactY = g1.baseY + (g2.baseY - g1.baseY) * p;
+                        return applyFactor(exactX, exactY);
+                    }
+                }
+                return applyFactor(first.baseX, first.baseY);
+            };
+
             const focusRanges = trackSegments.map(segment => ({
-                startTime: segment.trackingGlyphs[0]?.startTime ?? view.shot.startTime,
-                endTime: segment.trackingGlyphs.at(-1)?.startTime ?? view.shot.endTime,
+                startTime: segment.glyphs[0]?.startTime ?? view.shot.startTime,
+                endTime: segment.glyphs.at(-1)?.startTime ?? view.shot.endTime,
             }));
             const resolveFocusAtTime = (focusTime: number) => {
                 let focusX = 0;
@@ -397,9 +411,9 @@ export class SonnetPixiRuntime {
                 const focusWeights = resolveSonnetFocusWeights(focusRanges, focusTime);
                 for (let i = 0; i < trackSegments.length; i++) {
                     const seg = trackSegments[i];
-                    if (seg.trackingGlyphs.length === 0) continue;
+                    if (seg.glyphs.length === 0) continue;
                     const weight = focusWeights[i] ?? 0;
-                    const pos = resolveSonnetSegmentCameraFocus(seg.trackingGlyphs, focusTime);
+                    const pos = getSegmentFocus(seg, focusTime);
                     focusX += pos.x * weight;
                     focusY += pos.y * weight;
                 }
@@ -548,24 +562,6 @@ export class SonnetPixiRuntime {
 
                     glyph.caCyan.position.set(-currentOffset, currentOffset * 0.5);
                     glyph.caRed.position.set(currentOffset, -currentOffset * 0.5);
-                }
-
-                // Semi-hero echo ghosts: split along the layout normal on glyph entry,
-                // fade in over the first quarter, then quickly vanish. One-shot.
-                if (glyph.ghosts && glyph.ghostDuration) {
-                    const ghostProgress = clamp01((time - glyph.startTime) / glyph.ghostDuration);
-                    const ghostActive = glyphVisible && ghostProgress > 0 && ghostProgress < 1;
-                    // Quick fade-in, then a squared falloff so the echo dies fast.
-                    const envelope = ghostProgress <= 0.2
-                        ? ghostProgress / 0.2
-                        : Math.pow(1 - (ghostProgress - 0.2) / 0.8, 2);
-                    const spread = 1 - Math.pow(1 - ghostProgress, 3);
-                    for (const ghost of glyph.ghosts) {
-                        ghost.node.visible = ghostActive;
-                        if (!ghostActive) continue;
-                        ghost.node.position.set(ghost.dirX * spread, ghost.dirY * spread);
-                        ghost.node.alpha = envelope * ghost.alphaBase;
-                    }
                 }
 
                 glyph.updateAnimation?.(time);
