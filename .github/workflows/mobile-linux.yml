@@ -91,15 +91,14 @@ jobs:
         with:
           targets: aarch64-linux-android
 
-      - name: Setup Android NDK
-        id: setup-ndk
-        uses: nttld/setup-ndk@v1
-        with:
-          ndk-version: r29
-          local-cache: true
-
       - name: Install Android SDK components
         uses: android-actions/setup-android@v3
+        with:
+          packages: tools platform-tools ndk;29.0.14206865
+
+      - name: Set NDK_HOME
+        run: |
+          echo "NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865" >> "$GITHUB_ENV"
 
       - name: Cache Rust
         uses: swatinem/rust-cache@v2
@@ -110,13 +109,21 @@ jobs:
         run: npm ci
 
       - name: Initialize Android project
-        env:
-          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: npx tauri android init --ci --skip-targets-install
 
+      - name: Verify NDK clang toolchain
+        run: |
+          NDK_BIN="$NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin"
+          echo "NDK_HOME: $NDK_HOME"
+          if [ -x "$NDK_BIN/aarch64-linux-android24-clang" ]; then
+            "$NDK_BIN/aarch64-linux-android24-clang" --version
+          else
+            echo "::error::aarch64-linux-android24-clang not found in $NDK_BIN"
+            ls -la "$NDK_BIN" || true
+            exit 1
+          fi
+
       - name: Build ARM64 debug APK
-        env:
-          NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
         run: npx tauri android build --ci --debug --apk --target aarch64
 
       - name: Upload Android APK
