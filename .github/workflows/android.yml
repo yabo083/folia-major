@@ -37,7 +37,7 @@ env:
 jobs:
   android:
     name: Android ARM64 release APK
-    runs-on: ubuntu-22.04
+    runs-on: [self-hosted, Linux, X64, folia-android]
     steps:
       # 消掉 checkout/内部 git init 的 `init.defaultBranch` hint（无害但刷屏）。
       - name: Configure git default branch
