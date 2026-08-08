@@ -22,7 +22,9 @@ use base64::Engine as _;
 use rand::RngCore;
 use serde_json::{json, Value};
 use sha2::{Digest as _, Sha256};
-use tauri::{AppHandle, Emitter, Manager};
+#[cfg(any(desktop, test))]
+use tauri::Emitter;
+use tauri::{AppHandle, Manager};
 use tokio_stream::StreamExt as _;
 
 use crate::settings::SettingsStore;

@@ -117,7 +117,7 @@ jobs:
                 print "            val keystorePropertiesFile = rootProject.file(\"keystore.properties\")"
                 print "            val keystoreProperties = Properties()"
                 print "            if (keystorePropertiesFile.exists()) {"
-                print "                keystoreProperties.load(java.io.FileInputStream(keystorePropertiesFile))"
+                print "                keystoreProperties.load(keystorePropertiesFile.inputStream())"
                 print "            }"
                 print "            keyAlias = keystoreProperties[\"keyAlias\"] as String"
                 print "            keyPassword = keystoreProperties[\"keyPassword\"] as String"

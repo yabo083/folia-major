@@ -31,8 +31,12 @@ use rand::RngCore;
 use serde_json::{json, Value};
 use sha1::{Digest as _, Sha1};
 use sha2::Sha256;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 
+#[cfg(any(desktop, test))]
+use tauri::Emitter;
+
+#[cfg(any(desktop, test))]
 use crate::netease::NeteaseApiState;
 use crate::settings::SettingsStore;
 
