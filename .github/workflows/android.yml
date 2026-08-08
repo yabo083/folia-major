@@ -66,7 +66,7 @@ jobs:
       - name: Install Android SDK components
         uses: android-actions/setup-android@v4
         with:
-          packages: tools platform-tools ndk;29.0.14206865
+          packages: tools platform-tools build-tools;35.0.0 ndk;29.0.14206865
 
       - name: Set NDK_HOME
         run: |
@@ -152,6 +152,12 @@ jobs:
       # app-arm64-v8a-release.apk（签名）或 app-arm64-v8a-release-unsigned.apk。
       - name: Build signed ARM64 release APK
         run: npx tauri android build --ci --apk --target aarch64 --split-per-abi
+
+      - name: Verify APK signature
+        run: |
+          APK=$(ls src-tauri/gen/android/app/build/outputs/apk/*/release/*.apk | head -1)
+          echo "APK: $APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK"
 
       - name: Upload Android APK
         uses: actions/upload-artifact@v5
