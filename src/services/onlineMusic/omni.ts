@@ -361,6 +361,9 @@ export const omni = {
         if (collection.type === 'cloud') {
             return provider.catalog?.getCloudTracks?.(page.limit, page.offset, collection) ?? emptyPage(page.offset);
         }
+        if (collection.type === 'artist') {
+            return provider.catalog?.getArtistSongs?.(collection.id, page.limit, page.offset) ?? emptyPage(page.offset);
+        }
         return provider.catalog?.getPlaylistTracks?.(collection.id, page.limit, page.offset, collection) ?? emptyPage(page.offset);
     },
 

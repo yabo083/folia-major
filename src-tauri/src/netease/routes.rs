@@ -208,10 +208,12 @@ pub const ROUTES: &[Route] = &[
         kind: RouteKind::Plain,
     },
     // --- Artist ---
+    // The legacy `/api/artist/detail` weapi endpoint rejects requests with
+    // "参数错误"; the reference client uses the eapi `/api/artist/head/info/get`.
     Route {
         name: "/artist/detail",
-        upstream: "/api/artist/detail",
-        protocol: Protocol::Weapi,
+        upstream: "/api/artist/head/info/get",
+        protocol: Protocol::Eapi,
         id_in_path: false,
         kind: RouteKind::Plain,
     },
