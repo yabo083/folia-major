@@ -158,7 +158,7 @@ jobs:
       - name: Build signed ARM64 release APK
         run: npx tauri android build --ci --apk --target aarch64 --split-per-abi
         env:
-          GRADLE_OPTS: -Dhttp.proxyHost=127.0.0.1 -Dhttp.proxyPort=7890 -Dhttps.proxyHost=127.0.0.1 -Dhttps.proxyPort=7890 -Dhttp.nonProxyHosts=localhost|127.0.0.1
+          GRADLE_OPTS: -Dhttp.proxyHost=127.0.0.1 -Dhttp.proxyPort=7890 -Dhttps.proxyHost=127.0.0.1 -Dhttps.proxyPort=7890
 
       - name: Verify APK signature
         run: |
