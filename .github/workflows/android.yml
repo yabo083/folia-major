@@ -63,11 +63,8 @@ jobs:
         with:
           targets: aarch64-linux-android
 
-      - name: Install Android SDK components
-        uses: android-actions/setup-android@v4
-        with:
-          packages: tools platform-tools build-tools;35.0.0 ndk;29.0.14206865
-
+      # 自托管 runner（BREN9NP）已预装 Android SDK + NDK 29.0.14206865，
+      # ANDROID_HOME=/opt/android-sdk 由 runner .env 提供，无需再装组件。
       - name: Set NDK_HOME
         run: |
           echo "NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865" >> "$GITHUB_ENV"
