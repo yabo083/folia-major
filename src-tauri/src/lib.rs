@@ -131,16 +131,22 @@ pub fn run() {
             settings::save_settings,
             settings::set_app_locale,
             settings::get_cache_directory,
+            #[cfg(desktop)]
             settings::choose_cache_directory,
             settings::reset_cache_directory,
             // window
+            #[cfg(desktop)]
             window::window_focus_main,
+            #[cfg(desktop)]
             window::window_minimize,
+            #[cfg(desktop)]
             window::window_toggle_maximize,
+            #[cfg(desktop)]
             window::window_toggle_fullscreen,
             window::window_close,
             window::window_is_maximized,
             window::window_get_transparent_mode,
+            #[cfg(desktop)]
             window::window_set_transparent_mode,
             window::window_playback_handoff_consume,
             window::window_playback_handoff_submit,
@@ -149,6 +155,7 @@ pub fn run() {
             window::window_set_click_through,
             window::window_set_click_through_unlock_hover,
             window::window_get_always_on_top,
+            #[cfg(desktop)]
             window::window_set_always_on_top,
             // obs
             obs::obs_browser_source_get_status,
@@ -167,13 +174,17 @@ pub fn run() {
             stage::stage_complete_player_control,
             stage::stage_complete_player_queue,
             // remote
+            #[cfg(desktop)]
             remote::remote_control_open,
+            #[cfg(desktop)]
             remote::remote_control_toggle,
             remote::remote_control_close,
             remote::remote_control_get_always_on_top,
+            #[cfg(desktop)]
             remote::remote_control_set_always_on_top,
             remote::remote_control_publish_snapshot,
             remote::remote_control_get_snapshot,
+            #[cfg(desktop)]
             remote::remote_control_send_command,
             remote::playback_sync_bridge_get_status,
             // network
@@ -210,7 +221,9 @@ pub fn run() {
             // M9: video export (save dialog + sentinel source + window prepare/restore + raw write)
             video_export::video_export_choose_path,
             video_export::video_export_get_main_window_source,
+            #[cfg(desktop)]
             video_export::video_export_prepare_window,
+            #[cfg(desktop)]
             video_export::video_export_restore_window,
             video_export::video_export_write_file,
             // M10: auto updater (tauri-plugin-updater; contract mirrors electron main.cjs)

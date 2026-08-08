@@ -277,6 +277,8 @@ impl WindowRestoreSnapshot {
         }
     }
 
+    /// 恢复主窗口原始状态（桌面专属：fullscreen/maximize 在移动端 WebviewWindow 上不存在）。
+    #[cfg(desktop)]
     fn apply(&self, window: &tauri::WebviewWindow) -> Result<(), String> {
         window
             .set_position(PhysicalPosition::new(self.position.0, self.position.1))
@@ -494,6 +496,7 @@ pub fn video_export_get_main_window_source(
 // 为导出准备主窗口：先快照原始状态，快照失败绝不改动窗口；退出全屏/最大化时
 // 任一失败都如实报错（返回 Err），避免"prepared=true 但窗口状态错误"。
 // 只接受主窗口调用。
+#[cfg(desktop)]
 pub fn video_export_prepare_window(
     window: tauri::WebviewWindow,
     app: AppHandle,
@@ -541,6 +544,7 @@ pub fn video_export_prepare_window(
 // 绝不能把过期 bounds 留给下一次导出。无快照/窗口不可用时如实返回 false；
 // 只有对同一个仍存在的主窗口应用失败时才放回快照供重试。
 // 只接受主窗口调用。
+#[cfg(desktop)]
 pub fn video_export_restore_window(
     window: tauri::WebviewWindow,
     app: AppHandle,

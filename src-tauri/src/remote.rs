@@ -47,6 +47,7 @@ fn remote_window(app: &AppHandle) -> Option<tauri::WebviewWindow> {
     app.get_webview_window(REMOTE_WINDOW_LABEL)
 }
 
+#[cfg(desktop)]
 fn remote_url(app: &AppHandle) -> WebviewUrl {
     if cfg!(debug_assertions) {
         let dev = app
@@ -63,6 +64,7 @@ fn remote_url(app: &AppHandle) -> WebviewUrl {
     }
 }
 
+#[cfg(desktop)]
 fn apply_always_on_top(app: &AppHandle) {
     if let Some(window) = remote_window(app) {
         let _ = window.set_always_on_top(
@@ -72,6 +74,7 @@ fn apply_always_on_top(app: &AppHandle) {
     }
 }
 
+#[cfg(desktop)]
 fn apply_skip_taskbar(app: &AppHandle) {
     if let Some(window) = remote_window(app) {
         let _ = window.set_skip_taskbar(
@@ -83,6 +86,7 @@ fn apply_skip_taskbar(app: &AppHandle) {
 
 /// Apply always-on-top / skip-taskbar settings to the remote window (hooked
 /// into `save_settings` so a settings change takes effect immediately).
+#[cfg(desktop)]
 pub fn apply_remote_window_settings(app: &AppHandle) {
     apply_always_on_top(app);
     apply_skip_taskbar(app);
@@ -100,6 +104,7 @@ pub fn broadcast_playback_sync_bridge_status(app: &AppHandle) {
     let _ = app.emit_to("main", "playback-sync-bridge-status-changed", payload);
 }
 
+#[cfg(desktop)]
 fn create_remote_window(app: &AppHandle) -> Result<(), String> {
     if let Some(window) = remote_window(app) {
         let _ = window.set_title(REMOTE_WINDOW_TITLE);
@@ -196,6 +201,7 @@ fn sanitize_video_export_size(width: f64, height: f64) -> Option<(u32, u32)> {
 
 #[tauri::command]
 // 打开（或聚焦）远程控制窗口并广播 playback-sync-bridge 状态。
+#[cfg(desktop)]
 pub async fn remote_control_open(app: AppHandle) -> Result<bool, String> {
     create_remote_window(&app)?;
     Ok(true)
@@ -203,6 +209,7 @@ pub async fn remote_control_open(app: AppHandle) -> Result<bool, String> {
 
 #[tauri::command]
 // 切换远程控制窗口的开关状态，返回开关后的打开状态。
+#[cfg(desktop)]
 pub async fn remote_control_toggle(app: AppHandle) -> Result<bool, String> {
     if remote_window(&app).is_some() {
         if let Some(window) = remote_window(&app) {
@@ -236,6 +243,7 @@ pub fn remote_control_get_always_on_top(app: AppHandle) -> Result<bool, String> 
 
 #[tauri::command]
 // 持久化并应用远程控制窗口的 always-on-top 设置。
+#[cfg(desktop)]
 pub fn remote_control_set_always_on_top(
     app: AppHandle,
     always_on_top: bool,
@@ -285,6 +293,7 @@ pub fn remote_control_get_snapshot(
 
 #[tauri::command]
 // 远程窗口发送控制命令：处理窗口级命令，其余转发给主窗口渲染进程。
+#[cfg(desktop)]
 pub async fn remote_control_send_command(app: AppHandle, command: Value) -> Result<bool, String> {
     let command_type = command.get("type").and_then(Value::as_str).unwrap_or("");
     match command_type {
@@ -337,6 +346,7 @@ pub fn playback_sync_bridge_get_status(app: AppHandle) -> Result<Value, String> 
 
 // -- helpers -----------------------------------------------------------------
 
+#[cfg(desktop)]
 async fn set_transparent_mode_from_remote(app: AppHandle, enabled: bool) -> Result<bool, String> {
     // Request a playback handoff from the main window renderer (mirrors
     // `setMainWindowTransparentModeFromRemote`), then rebuild the main window.
@@ -372,6 +382,7 @@ async fn set_transparent_mode_from_remote(app: AppHandle, enabled: bool) -> Resu
     crate::window::window_set_transparent_mode(app, enabled, handoff)
 }
 
+#[cfg(desktop)]
 fn resize_main_window(app: &AppHandle, command: &Value) -> Result<bool, String> {
     let Some(main) = app.get_webview_window(crate::window::MAIN_WINDOW_LABEL) else {
         return Ok(false);
@@ -396,6 +407,7 @@ fn resize_main_window(app: &AppHandle, command: &Value) -> Result<bool, String> 
     Ok(true)
 }
 
+#[cfg(desktop)]
 fn now_ms() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

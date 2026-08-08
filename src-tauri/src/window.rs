@@ -202,6 +202,7 @@ fn publish_click_through_state(app: &AppHandle) {
     let _ = app.emit("main-window-click-through-changed", payload);
 }
 
+#[cfg(desktop)]
 fn start_click_through_monitor(app: AppHandle) {
     std::thread::spawn(move || loop {
         std::thread::sleep(Duration::from_millis(CLICK_THROUGH_MONITOR_INTERVAL_MS));
@@ -296,6 +297,7 @@ fn save_window_state(app: &AppHandle, window: &tauri::WebviewWindow) {
     }
 }
 
+#[cfg(desktop)]
 fn restore_window_state(app: &AppHandle) {
     let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) else {
         return;
@@ -328,6 +330,7 @@ fn restore_window_state(app: &AppHandle) {
     }
 }
 
+#[cfg(desktop)]
 fn setup_window_state_persistence(app: &AppHandle) {
     let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) else {
         return;
@@ -358,6 +361,7 @@ fn setup_window_state_persistence(app: &AppHandle) {
 }
 
 // 启动/透明重建后应用 always-on-top 与扩展样式。
+#[cfg(desktop)]
 fn apply_startup_styles(app: &AppHandle) -> Result<(), String> {
     let settings = app.state::<SettingsStore>();
     let always_on_top = settings.get_bool(MAIN_WINDOW_ALWAYS_ON_TOP);
@@ -376,6 +380,7 @@ fn apply_startup_styles(app: &AppHandle) -> Result<(), String> {
     apply_main_window_ex_style(&window, enabled, unlock_hover, hide_taskbar)
 }
 
+#[cfg(desktop)]
 fn is_main_window_visible(app: &AppHandle) -> bool {
     app.get_webview_window(MAIN_WINDOW_LABEL)
         .map(|window| {
@@ -384,6 +389,7 @@ fn is_main_window_visible(app: &AppHandle) -> bool {
         .unwrap_or(false)
 }
 
+#[cfg(desktop)]
 fn hide_main_window(app: &AppHandle) -> bool {
     let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) else {
         return false;
@@ -394,6 +400,7 @@ fn hide_main_window(app: &AppHandle) -> bool {
     window.hide().is_ok()
 }
 
+#[cfg(desktop)]
 pub fn focus_main_window(app: &AppHandle) {
     let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) else {
         return;
@@ -403,6 +410,7 @@ pub fn focus_main_window(app: &AppHandle) {
     let _ = window.set_focus();
 }
 
+#[cfg(desktop)]
 fn toggle_main_window_visibility(app: &AppHandle) {
     if is_main_window_visible(app) {
         hide_main_window(app);
@@ -476,6 +484,7 @@ pub fn setup(app: &mut tauri::App) {
 #[tauri::command]
 // 显示/聚焦主窗口（恢复最小化 + show + set_focus）。
 // 远程发起视频导出时，主窗口需要可见并被带到前台，用户才能看到确认 toast 并点击。
+#[cfg(desktop)]
 pub fn window_focus_main(app: AppHandle) -> Result<bool, String> {
     focus_main_window(&app);
     Ok(app.get_webview_window(MAIN_WINDOW_LABEL).is_some())
@@ -483,6 +492,7 @@ pub fn window_focus_main(app: AppHandle) -> Result<bool, String> {
 
 #[tauri::command]
 // 最小化主窗口；MINIMIZE_TO_TRAY 开启时改为隐藏到托盘。
+#[cfg(desktop)]
 pub fn window_minimize(app: AppHandle) -> Result<bool, String> {
     let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) else {
         return Ok(false);
@@ -504,6 +514,7 @@ pub fn window_minimize(app: AppHandle) -> Result<bool, String> {
 
 #[tauri::command]
 // 最大化/还原主窗口，返回切换后的最大化状态。
+#[cfg(desktop)]
 pub fn window_toggle_maximize(app: AppHandle) -> Result<bool, String> {
     let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) else {
         return Ok(false);
@@ -523,6 +534,7 @@ pub fn window_toggle_maximize(app: AppHandle) -> Result<bool, String> {
 
 #[tauri::command]
 // 全屏/退出全屏切换，返回切换后的状态。
+#[cfg(desktop)]
 pub fn window_toggle_fullscreen(app: AppHandle) -> Result<bool, String> {
     let Some(window) = app.get_webview_window(MAIN_WINDOW_LABEL) else {
         return Ok(false);
@@ -566,6 +578,7 @@ pub fn window_get_transparent_mode(app: AppHandle) -> Result<bool, String> {
 
 #[tauri::command]
 // 切换透明播放器背景：写设置、暂存 handoff、重置穿透状态并重建主窗口。
+#[cfg(desktop)]
 pub fn window_set_transparent_mode(
     app: AppHandle,
     enabled: bool,
@@ -748,6 +761,7 @@ pub fn window_get_always_on_top(app: AppHandle) -> Result<bool, String> {
 
 #[tauri::command]
 // 设置主窗口置顶并持久化设置。
+#[cfg(desktop)]
 pub fn window_set_always_on_top(app: AppHandle, enabled: bool) -> Result<bool, String> {
     app.state::<SettingsStore>()
         .set(MAIN_WINDOW_ALWAYS_ON_TOP.to_string(), Value::Bool(enabled))?;

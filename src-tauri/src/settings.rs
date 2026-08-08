@@ -321,6 +321,7 @@ pub fn save_settings(
             });
         }
     }
+    #[cfg(desktop)]
     if key == REMOTE_CONTROL_ALWAYS_ON_TOP || key == REMOTE_CONTROL_SKIP_TASKBAR {
         crate::remote::apply_remote_window_settings(&app);
     }
@@ -334,6 +335,7 @@ pub fn save_settings(
         crate::voice::sync_state(&app);
     }
     // M10 联动：更新相关设置变化 → 触发检查/下载/重置状态（镜像 main.cjs save-settings）。
+    #[cfg(desktop)]
     if key == crate::updater::ENABLE_UPDATE_CHECK_KEY
         || key == crate::updater::ENABLE_AUTO_UPDATE_KEY
         || key == UPDATE_CHANNEL
@@ -367,6 +369,7 @@ pub fn get_cache_directory(
     }))
 }
 
+#[cfg(desktop)]
 fn pick_cache_directory(app: &AppHandle) -> Option<PathBuf> {
     app.dialog()
         .file()
@@ -377,6 +380,7 @@ fn pick_cache_directory(app: &AppHandle) -> Option<PathBuf> {
 
 #[tauri::command]
 // 弹出原生目录选择框；选择后持久化 CACHE_DIRECTORY，返回 { canceled, path, isDefault }。
+#[cfg(desktop)]
 pub fn choose_cache_directory(
     app: AppHandle,
     state: State<'_, SettingsStore>,
